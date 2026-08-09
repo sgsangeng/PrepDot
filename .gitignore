@@ -1,0 +1,19 @@
+# OS
+.DS_Store
+
+# Backend (Maven / Java)
+prepdot-backend/target/
+prepdot-backend/.idea/
+prepdot-backend/*.iml
+prepdot-backend/src/main/resources/application.yml
+prepdot-backend/src/main/resources/application-local.yml
+
+# Frontend runtime
+app/.prepdot-server.log
+
+# iOS (Xcode)
+prepdot-ios/PreDot/.git.bak.xcode-autoinit/
+prepdot-ios/PreDot/PrepDot.xcodeproj/xcuserdata/
+prepdot-ios/PreDot/PrepDot.xcodeproj/project.xcworkspace/xcuserdata/
+prepdot-ios/**/DerivedData/
+prepdot-ios/**/*.xcuserstate

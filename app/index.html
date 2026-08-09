@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PrepDot</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="desktop-frame">
+      <header class="window-titlebar" aria-label="应用窗口栏">
+        <div class="traffic-lights" aria-hidden="true">
+          <span class="close"></span>
+          <span class="minimize"></span>
+          <span class="maximize"></span>
+        </div>
+        <div class="window-title">
+          <strong>PrepDot</strong>
+          <span>Local workspace</span>
+        </div>
+        <div class="window-status">
+          <span class="status-dot"></span>
+          本地模式
+        </div>
+      </header>
+
+      <div class="app-shell">
+        <aside class="sidebar" aria-label="主导航">
+          <div class="brand">
+            <span class="brand-mark">P</span>
+            <div>
+              <strong>PrepDot</strong>
+              <span>Local interview cards</span>
+            </div>
+          </div>
+
+          <nav class="nav-list">
+            <button class="nav-item active" data-view="today" type="button">
+              <span aria-hidden="true">◐</span>
+              复习
+            </button>
+            <button class="nav-item" data-view="knowledge" type="button">
+              <span aria-hidden="true">▥</span>
+              知识库
+            </button>
+            <button class="nav-item" data-view="cards" type="button">
+              <span aria-hidden="true">□</span>
+              卡片库
+            </button>
+            <button class="nav-item" data-view="settings" type="button">
+              <span aria-hidden="true">⚙</span>
+              设置
+            </button>
+          </nav>
+
+          <div class="sidebar-note">
+            <span>AI 状态</span>
+            <strong id="ai-status">未配置 API Key</strong>
+          </div>
+        </aside>
+
+        <main class="workspace">
+        <section class="view active" id="view-today" aria-labelledby="today-title">
+          <section class="review-home">
+            <p class="date-line" id="today-date">Today</p>
+            <h1 id="today-title">今日复习</h1>
+
+            <div class="review-progress-card" aria-label="今日进度">
+              <span>今日进度</span>
+              <strong id="completed-count">11 / 20</strong>
+              <div class="progress-track">
+                <div class="progress-fill" id="today-progress-fill"></div>
+              </div>
+              <small id="total-percent">55%</small>
+            </div>
+
+            <button class="start-button" id="start-review-button" type="button" data-start-review>开始复习</button>
+          </section>
+        </section>
+
+        <section class="view" id="view-knowledge" aria-labelledby="knowledge-title">
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">知识库</p>
+              <h1 id="knowledge-title">管理资料和卡包来源</h1>
+            </div>
+            <div class="action-row">
+              <button class="secondary-action" type="button" id="import-deck-btn">导入卡包 JSON</button>
+              <button class="primary-action" type="button" id="ai-gen-btn">✦ AI 生成卡片</button>
+            </div>
+          </div>
+
+          <div class="toolbar">
+            <button class="chip active" type="button">全部</button>
+            <button class="chip" type="button">个人资料</button>
+            <button class="chip" type="button">通用知识</button>
+            <button class="chip" type="button">卡包</button>
+          </div>
+
+          <div class="source-grid" id="source-grid"></div>
+        </section>
+
+        <section class="view" id="view-cards" aria-labelledby="cards-title">
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">卡片库</p>
+              <h1 id="cards-title">按卡组复习</h1>
+            </div>
+            <button class="primary-action" type="button">新建卡组</button>
+          </div>
+
+          <div class="filter-bar">
+            <input id="card-search" type="search" placeholder="搜索卡组、方向或资料来源" />
+            <select id="category-filter" aria-label="分类筛选">
+              <option value="all">全部分类</option>
+              <option value="后端">后端</option>
+              <option value="前端">前端</option>
+              <option value="产品经理">产品经理</option>
+              <option value="Agent">Agent</option>
+            </select>
+          </div>
+
+          <div class="deck-grid" id="deck-grid"></div>
+        </section>
+
+        <section class="view" id="view-deck-detail" aria-labelledby="deck-detail-title">
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">卡组详情</p>
+              <h1 id="deck-detail-title">Redis 项目复盘</h1>
+            </div>
+            <div class="action-row">
+              <button class="secondary-action" type="button" data-view-jump="cards">返回卡片库</button>
+              <button class="primary-action" type="button" data-start-review>复习此卡组</button>
+            </div>
+          </div>
+
+          <div class="deck-detail-layout">
+            <section class="deck-card-list" aria-label="卡组内卡片">
+              <div class="deck-summary">
+                <span id="deck-detail-meta">后端 · 24 张卡片</span>
+                <div class="progress-track">
+                  <div class="progress-fill" id="deck-detail-progress"></div>
+                </div>
+              </div>
+              <div id="deck-card-list"></div>
+            </section>
+
+            <section class="card-editor" aria-label="编辑卡片">
+              <div class="section-title">
+                <h2>编辑卡片</h2>
+                <span id="editor-memory">记忆度 48%</span>
+              </div>
+              <div class="editor-status" id="editor-status" aria-live="polite"></div>
+              <label>
+                问题
+                <textarea id="edit-question" rows="5"></textarea>
+              </label>
+              <label>
+                答案
+                <textarea id="edit-answer" rows="8"></textarea>
+              </label>
+              <label>
+                分类
+                <input id="edit-category" type="text" />
+              </label>
+              <div class="editor-actions">
+                <button class="secondary-action danger-action" type="button" id="delete-card">删除</button>
+                <button class="secondary-action" type="button" id="new-card">新增卡片</button>
+                <button class="secondary-action" type="button" id="reset-card-edit">还原</button>
+                <button class="primary-action" type="button" id="save-card-edit">保存修改</button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-review" aria-labelledby="review-title">
+          <div class="review-shell">
+            <div class="review-top">
+              <div>
+                <p class="eyebrow">复习会话</p>
+                <h1 id="review-title">第 <span id="review-index">1</span> 张 / <span id="review-total">20</span></h1>
+              </div>
+              <button class="secondary-action" type="button" data-exit-review>退出</button>
+            </div>
+
+            <article class="flashcard" id="flashcard" tabindex="0">
+              <div class="card-meta">
+                <span id="review-category">后端</span>
+                <span id="review-memory">记忆度 48%</span>
+              </div>
+              <h2 id="review-question">为什么你的项目要引入 Redis？</h2>
+              <p id="review-answer" hidden>Redis 用来承接热点读请求、降低数据库压力，并通过过期策略保证缓存数据不会长期失效。</p>
+              <button class="link-action" type="button" id="reveal-answer">查看答案</button>
+            </article>
+
+            <div class="rating-row">
+              <button type="button" data-rating="again">不会</button>
+              <button type="button" data-rating="hard">困难</button>
+              <button type="button" data-rating="good">还行</button>
+              <button type="button" data-rating="easy">熟练</button>
+            </div>
+
+            <div class="relation-strip" aria-label="相关卡片">
+              <span>关联</span>
+              <div id="relation-dots"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-settings" aria-labelledby="settings-title">
+          <div class="page-head">
+            <div>
+              <p class="eyebrow">设置</p>
+              <h1 id="settings-title">本地数据和 AI 配置</h1>
+            </div>
+            <button class="primary-action" type="button" id="save-settings">保存设置</button>
+          </div>
+
+          <div class="settings-grid">
+            <section class="settings-panel">
+              <h2>AI 增强</h2>
+              <label>
+                API Key
+                <input id="api-key" type="password" placeholder="sk-..." />
+              </label>
+              <label>
+                模型
+                <select id="model-name">
+                  <option>gpt-4.1-mini</option>
+                  <option>gpt-4.1</option>
+                  <option>自定义 OpenAI 兼容模型</option>
+                </select>
+              </label>
+              <label class="switch-row">
+                <span>启用 AI 生成</span>
+                <input id="ai-enabled" type="checkbox" />
+              </label>
+            </section>
+
+            <section class="settings-panel">
+              <h2>学习计划</h2>
+              <label>
+                每日目标
+                <input id="daily-target" type="number" min="5" max="80" value="20" />
+              </label>
+              <label>
+                新卡比例
+                <input id="new-card-ratio" type="range" min="10" max="50" value="30" />
+              </label>
+              <div class="local-note">
+                <strong>本地优先</strong>
+                <p>卡片、计划和复习记录默认保存在本机。AI 请求只在你主动启用相关功能时发生。</p>
+              </div>
+            </section>
+          </div>
+        </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- 隐藏文件选择框 -->
+    <input type="file" id="import-file-input" accept=".json" hidden />
+
+    <!-- 全局 toast 通知 -->
+    <div id="global-toast" class="global-toast" role="status" aria-live="polite"></div>
+
+    <!-- 导入卡包弹窗 -->
+    <div class="modal-overlay" id="import-modal" hidden role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
+      <div class="modal-panel">
+        <div class="modal-head">
+          <h2 id="import-modal-title">导入卡包</h2>
+          <button class="modal-close" type="button" id="close-import-modal" aria-label="关闭">✕</button>
+        </div>
+        <div id="import-preview-content" class="modal-body"></div>
+        <div class="modal-foot">
+          <button class="secondary-action" type="button" id="cancel-import">取消</button>
+          <button class="primary-action" type="button" id="confirm-import">确认导入</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI 生成卡片弹窗 -->
+    <div class="modal-overlay" id="ai-modal" hidden role="dialog" aria-modal="true" aria-labelledby="ai-modal-title">
+      <div class="modal-panel modal-panel--wide">
+        <div class="modal-head">
+          <h2 id="ai-modal-title">AI 生成卡片</h2>
+          <button class="modal-close" type="button" id="close-ai-modal" aria-label="关闭">✕</button>
+        </div>
+        <div class="modal-body">
+          <!-- 输入阶段 -->
+          <div id="ai-input-section">
+            <div class="import-fields">
+              <label>卡包名称
+                <input type="text" id="ai-deck-title" placeholder="给这组卡片起个名字" />
+              </label>
+              <label>分类
+                <select id="ai-category">
+                  <option value="综合">综合</option>
+                  <option value="前端">前端</option>
+                  <option value="后端">后端</option>
+                  <option value="计算机基础">计算机基础</option>
+                  <option value="产品经理">产品经理</option>
+                  <option value="Agent">Agent</option>
+                </select>
+              </label>
+              <label>生成数量
+                <input type="number" id="ai-card-count" min="3" max="30" value="10" />
+              </label>
+            </div>
+            <label class="ai-content-label">
+              粘贴资料内容
+              <textarea id="ai-source-content" rows="10" placeholder="粘贴你的笔记、简历片段、项目描述……AI 会根据内容生成面向面试的闪卡"></textarea>
+            </label>
+            <div id="ai-gen-error" class="import-error" hidden></div>
+          </div>
+          <!-- 生成中 -->
+          <div id="ai-loading-section" hidden>
+            <div class="ai-loading">
+              <span class="ai-loading-dot"></span>
+              <span>AI 正在生成卡片……</span>
+            </div>
+          </div>
+          <!-- 预览阶段 -->
+          <div id="ai-preview-section" hidden>
+            <p class="import-count">生成了 <strong id="ai-generated-count">0</strong> 张卡片</p>
+            <div id="ai-preview-list" class="import-preview-list ai-full-preview"></div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="secondary-action" type="button" id="ai-back-btn" hidden>← 返回修改</button>
+          <button class="secondary-action" type="button" id="cancel-ai">取消</button>
+          <button class="primary-action" type="button" id="generate-ai-btn">开始生成</button>
+          <button class="primary-action" type="button" id="confirm-ai-btn" hidden>导入卡片</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.prepdot.mapper.FlashcardMapper">
+
+    <!-- 查询当前用户今日到期卡片，记忆度低的优先 -->
+    <select id="selectDueCards" resultType="com.prepdot.entity.Flashcard">
+        SELECT f.*
+        FROM flashcard f
+        JOIN deck d ON f.deck_id = d.id
+        WHERE f.next_review_at &lt;= NOW()
+          AND (#{userId} IS NULL OR d.user_id = #{userId})
+        ORDER BY f.memory_score ASC, f.next_review_at ASC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PrepDot · 面试卡片复习</title>
+<style>
+  :root {
+    --bg: #0f0f13;
+    --surface: #1a1a22;
+    --surface2: #24242f;
+    --border: #2e2e3d;
+    --accent: #7c6af7;
+    --accent2: #a78bfa;
+    --text: #e8e8f0;
+    --muted: #8888aa;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --orange: #f97316;
+    --red: #ef4444;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── 顶栏 ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky; top: 0; z-index: 50;
+  }
+  .logo { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
+  .logo span { color: var(--accent2); }
+  .nav { display: flex; gap: 4px; margin-left: auto; }
+  .nav button {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500;
+    transition: .15s;
+  }
+  .nav button.active, .nav button:hover { color: var(--text); background: var(--surface2); }
+  .nav button.active { color: var(--accent2); }
+
+  /* ── 主内容 ── */
+  .main { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+
+  /* ── 页面 ── */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── 卡片网格 ── */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .section-title { font-size: 20px; font-weight: 700; }
+  .btn-primary {
+    background: var(--accent); color: #fff; border: none; cursor: pointer;
+    padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600;
+    transition: .15s; white-space: nowrap;
+  }
+  .btn-primary:hover { background: var(--accent2); }
+
+  .deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .deck-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 22px; cursor: pointer;
+    transition: .15s; position: relative; overflow: hidden;
+  }
+  .deck-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .deck-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+  .deck-tag {
+    display: inline-block; font-size: 11px; font-weight: 600;
+    padding: 3px 10px; border-radius: 20px;
+    background: #7c6af722; color: var(--accent2); margin-bottom: 10px;
+  }
+  .deck-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .deck-desc { font-size: 13px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+  .deck-stats { display: flex; gap: 18px; }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat-val { font-size: 20px; font-weight: 700; }
+  .stat-label { font-size: 11px; color: var(--muted); }
+  .score-bar { height: 4px; background: var(--border); border-radius: 4px; margin-top: 14px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--red), var(--orange), var(--green)); transition: width .5s; }
+
+  /* ── 今日计划 ── */
+  .plan-header {
+    background: linear-gradient(135deg, #1e1b4b, #312e81);
+    border: 1px solid #4338ca44; border-radius: var(--radius);
+    padding: 28px; margin-bottom: 28px; display: flex; align-items: center; gap: 24px;
+  }
+  .plan-num { font-size: 52px; font-weight: 800; color: var(--accent2); line-height: 1; }
+  .plan-info h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .plan-info p { font-size: 14px; color: var(--muted); }
+  .plan-progress { flex: 1; }
+  .progress-bar { height: 8px; background: var(--border); border-radius: 8px; overflow: hidden; margin-top: 8px; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 8px; transition: width .5s; }
+  .btn-start {
+    margin-left: auto; background: var(--accent2); color: #0f0f13;
+    border: none; cursor: pointer; padding: 14px 28px; border-radius: 12px;
+    font-size: 15px; font-weight: 700; transition: .15s; white-space: nowrap;
+  }
+  .btn-start:hover { background: #c4b5fd; }
+  .btn-start:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── 复习卡片 ── */
+  .review-wrap { max-width: 600px; margin: 0 auto; }
+  .review-progress { text-align: center; color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+  .card-scene { perspective: 1200px; width: 100%; aspect-ratio: 16/9; cursor: pointer; margin-bottom: 24px; }
+  .card-flip {
+    width: 100%; height: 100%;
+    transform-style: preserve-3d;
+    transition: transform .5s cubic-bezier(.4,.2,.2,1);
+    position: relative;
+  }
+  .card-flip.flipped { transform: rotateX(180deg); }
+  .card-face {
+    position: absolute; inset: 0;
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    border-radius: 20px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 36px; text-align: center;
+  }
+  .card-front {
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .card-back {
+    background: linear-gradient(135deg, #1e1b4b, #1a1a2e);
+    border: 1px solid var(--accent);
+    transform: rotateX(180deg);
+  }
+  .card-hint { font-size: 12px; color: var(--muted); margin-bottom: 16px; letter-spacing: .5px; text-transform: uppercase; }
+  .card-question { font-size: 20px; font-weight: 700; line-height: 1.5; }
+  .card-answer { font-size: 16px; line-height: 1.7; color: var(--text); }
+
+  .rating-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .rating-btn {
+    border: 2px solid transparent; border-radius: 12px; cursor: pointer;
+    padding: 14px 8px; display: flex; flex-direction: column;
+    align-items: center; gap: 5px; transition: .15s; font-weight: 700;
+    opacity: 0; pointer-events: none; transition: opacity .3s;
+  }
+  .rating-btn.visible { opacity: 1; pointer-events: all; }
+  .rating-btn .r-label { font-size: 15px; }
+  .rating-btn .r-days { font-size: 11px; font-weight: 500; }
+
+  .btn-again  { background: #ef444422; border-color: #ef4444; color: #ef4444; }
+  .btn-hard   { background: #f9731622; border-color: #f97316; color: #f97316; }
+  .btn-good   { background: #22c55e22; border-color: #22c55e; color: #22c55e; }
+  .btn-easy   { background: #7c6af722; border-color: #7c6af7; color: #a78bfa; }
+  .rating-btn:hover { filter: brightness(1.3); transform: translateY(-2px); }
+
+  .review-done {
+    text-align: center; padding: 60px 24px; display: none;
+  }
+  .review-done h2 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+  .review-done p { color: var(--muted); font-size: 15px; margin-bottom: 28px; }
+  .confetti { font-size: 52px; margin-bottom: 16px; }
+
+  /* ── 新建卡组弹窗 ── */
+  .modal-bg {
+    position: fixed; inset: 0; background: #00000088; backdrop-filter: blur(6px);
+    z-index: 100; display: none; align-items: center; justify-content: center;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 32px; width: 500px; max-width: calc(100vw - 32px);
+  }
+  .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 24px; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .field input, .field textarea, .field select {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 14px; color: var(--text); font-size: 14px;
+    outline: none; resize: vertical;
+  }
+  .field input:focus, .field textarea:focus { border-color: var(--accent); }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+  .btn-cancel {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--muted); cursor: pointer; padding: 10px 20px;
+    border-radius: 10px; font-size: 14px;
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(60px);
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 12px 22px; border-radius: 30px;
+    font-size: 14px; font-weight: 500; z-index: 200; transition: transform .3s;
+    pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ── 空状态 ── */
+  .empty { text-align: center; padding: 64px 24px; color: var(--muted); }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+  .empty p { font-size: 15px; }
+
+  /* ── 加载 ── */
+  .loading { text-align: center; padding: 40px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<!-- 顶栏 -->
+<div class="topbar">
+  <div class="logo">Prep<span>Dot</span></div>
+  <nav class="nav">
+    <button class="active" onclick="showPage('decks')">📚 卡组</button>
+    <button onclick="showPage('review')">🎯 今日复习</button>
+  </nav>
+</div>
+
+<!-- 主内容 -->
+<div class="main">
+
+  <!-- ─── 卡组页 ─── -->
+  <div class="page active" id="page-decks">
+    <div class="section-header">
+      <div class="section-title">我的卡组</div>
+      <button class="btn-primary" onclick="openCreateModal()">＋ 新建卡组</button>
+    </div>
+    <div id="deck-list" class="deck-grid">
+      <div class="loading">加载中…</div>
+    </div>
+  </div>
+
+  <!-- ─── 今日复习页 ─── -->
+  <div class="page" id="page-review">
+
+    <!-- 计划概览 -->
+    <div id="plan-overview">
+      <div class="plan-header" id="plan-header">
+        <div class="plan-num" id="plan-num">—</div>
+        <div class="plan-info">
+          <h2>今日待复习</h2>
+          <p id="plan-sub">加载中…</p>
+        </div>
+        <div class="plan-progress" id="plan-progress-wrap" style="display:none">
+          <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted)">
+            <span>进度</span><span id="plan-pct">0%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" id="plan-bar" style="width:0%"></div></div>
+        </div>
+        <button class="btn-start" id="btn-start" disabled onclick="startReview()">开始复习 →</button>
+      </div>
+    </div>
+
+    <!-- 复习卡片区 -->
+    <div class="review-wrap" id="review-session" style="display:none">
+      <div class="review-progress" id="review-progress"></div>
+
+      <div class="card-scene" onclick="flipCard()">
+        <div class="card-flip" id="card-flip">
+          <div class="card-face card-front">
+            <div class="card-hint">点击卡片翻面</div>
+            <div class="card-question" id="card-q"></div>
+          </div>
+          <div class="card-face card-back">
+            <div class="card-hint">参考答案</div>
+            <div class="card-answer" id="card-a"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rating-row">
+        <button class="rating-btn btn-again" onclick="rate('again')">
+          <span class="r-label">Again</span>
+          <span class="r-days">重新学习</span>
+        </button>
+        <button class="rating-btn btn-hard" onclick="rate('hard')">
+          <span class="r-label">Hard</span>
+          <span class="r-days">明天</span>
+        </button>
+        <button class="rating-btn btn-good" onclick="rate('good')">
+          <span class="r-label">Good</span>
+          <span class="r-days">2-4天</span>
+        </button>
+        <button class="rating-btn btn-easy" onclick="rate('easy')">
+          <span class="r-label">Easy</span>
+          <span class="r-days">5-10天</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 复习完成 -->
+    <div class="review-done" id="review-done">
+      <div class="confetti">🎉</div>
+      <h2>今日任务完成！</h2>
+      <p>你的记忆力正在不断增强，明天继续加油！</p>
+      <button class="btn-primary" onclick="showPage('decks')">回到卡组</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- 新建卡组弹窗 -->
+<div class="modal-bg" id="create-modal">
+  <div class="modal">
+    <h3>新建卡组</h3>
+    <div class="field">
+      <label>卡组名称 *</label>
+      <input id="f-title" placeholder="如：Java 面试基础">
+    </div>
+    <div class="field">
+      <label>分类</label>
+      <input id="f-category" placeholder="如：Java / Spring / 算法" value="综合">
+    </div>
+    <div class="field">
+      <label>描述</label>
+      <textarea id="f-desc" rows="2" placeholder="可选"></textarea>
+    </div>
+    <div class="field">
+      <label>批量导入卡片（JSON，可选）</label>
+      <textarea id="f-json" rows="5"
+        placeholder='[{"question":"问题1","answer":"答案1"},{"question":"问题2","answer":"答案2"}]'></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">取消</button>
+      <button class="btn-primary" onclick="createDeck()">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'http://localhost:8080/api';
+
+// ── 工具 ──────────────────────────────────────
+async function req(method, path, body) {
+  const res = await fetch(API + path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  return res.json();
+}
+
+function toast(msg, dur = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// ── 页面切换 ─────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach((b, i) => {
+    b.classList.toggle('active', ['decks','review'][i] === name);
+  });
+  document.getElementById('page-' + name).classList.add('active');
+  if (name === 'decks') loadDecks();
+  if (name === 'review') loadPlan();
+}
+
+// ── 卡组页 ───────────────────────────────────
+async function loadDecks() {
+  const el = document.getElementById('deck-list');
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    const r = await req('GET', '/decks');
+    const decks = r.data || [];
+    if (!decks.length) {
+      el.innerHTML = `<div class="empty" style="grid-column:1/-1">
+        <div class="empty-icon">📭</div>
+        <p>还没有卡组，点击「新建卡组」开始吧</p>
+      </div>`;
+      return;
+    }
+    el.innerHTML = decks.map(d => {
+      const pct = d.cardCount ? Math.round(d.avgMemoryScore) : 0;
+      return `
+      <div class="deck-card" onclick="alert('卡组「${d.title}」共 ${d.cardCount} 张卡片')">
+        <div class="deck-tag">${d.category}</div>
+        <div class="deck-title">${d.title}</div>
+        <div class="deck-desc">${d.description || '暂无描述'}</div>
+        <div class="deck-stats">
+          <div class="stat">
+            <div class="stat-val">${d.cardCount}</div>
+            <div class="stat-label">总卡片</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val">${d.reviewedCount}</div>
+            <div class="stat-label">已复习</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val">${pct}</div>
+            <div class="stat-label">记忆度</div>
+          </div>
+        </div>
+        <div class="score-bar">
+          <div class="score-fill" style="width:${pct}%"></div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">⚠️</div><p>连接后端失败，请确认 Spring Boot 已启动</p></div>';
+  }
+}
+
+// ── 新建卡组 ─────────────────────────────────
+function openCreateModal() { document.getElementById('create-modal').classList.add('open'); }
+function closeModal() { document.getElementById('create-modal').classList.remove('open'); }
+
+async function createDeck() {
+  const title = document.getElementById('f-title').value.trim();
+  if (!title) { toast('⚠️ 请填写卡组名称'); return; }
+
+  const body = {
+    title,
+    category: document.getElementById('f-category').value.trim() || '综合',
+    description: document.getElementById('f-desc').value.trim(),
+  };
+
+  const jsonRaw = document.getElementById('f-json').value.trim();
+  if (jsonRaw) {
+    try {
+      const cards = JSON.parse(jsonRaw);
+      body.cards = Array.isArray(cards) ? cards : cards.cards || [];
+    } catch { toast('⚠️ JSON 格式有误'); return; }
+  }
+
+  try {
+    const r = await req('POST', '/decks', body);
+    if (r.code === 200) {
+      closeModal();
+      toast(`✅ 卡组「${r.data.title}」创建成功，共 ${r.data.cardCount} 张卡片`);
+      loadDecks();
+      document.getElementById('f-title').value = '';
+      document.getElementById('f-desc').value = '';
+      document.getElementById('f-json').value = '';
+    } else { toast('❌ ' + r.message); }
+  } catch { toast('❌ 网络错误'); }
+}
+
+// ── 今日计划 ─────────────────────────────────
+let reviewCards = [], reviewIdx = 0;
+
+async function loadPlan() {
+  // 重置 UI
+  document.getElementById('review-session').style.display = 'none';
+  document.getElementById('review-done').style.display = 'none';
+  document.getElementById('plan-overview').style.display = 'block';
+
+  try {
+    const r = await req('GET', '/plan/today');
+    const plan = r.data;
+    reviewCards = plan.cards || [];
+
+    const total = plan.totalCount;
+    const done  = plan.completedCount;
+    const pct   = total ? Math.round(done / total * 100) : 0;
+
+    document.getElementById('plan-num').textContent = total - done;
+    document.getElementById('plan-sub').textContent =
+      total ? `已完成 ${done}/${total}，预计 ${plan.estimatedMinutes} 分钟` : '今天没有待复习的卡片';
+
+    if (total > 0) {
+      document.getElementById('plan-progress-wrap').style.display = 'block';
+      document.getElementById('plan-pct').textContent = pct + '%';
+      document.getElementById('plan-bar').style.width = pct + '%';
+    }
+
+    const btn = document.getElementById('btn-start');
+    btn.disabled = reviewCards.length === 0;
+    btn.textContent = reviewCards.length ? `开始复习 ${reviewCards.length} 张 →` : '今日已完成 ✓';
+  } catch { toast('❌ 获取计划失败，请检查后端是否启动'); }
+}
+
+function startReview() {
+  reviewIdx = 0;
+  document.getElementById('plan-overview').style.display = 'none';
+  document.getElementById('review-session').style.display = 'block';
+  document.getElementById('review-done').style.display = 'none';
+  showCard();
+}
+
+function showCard() {
+  if (reviewIdx >= reviewCards.length) {
+    document.getElementById('review-session').style.display = 'none';
+    document.getElementById('review-done').style.display = 'block';
+    return;
+  }
+  const card = reviewCards[reviewIdx];
+  document.getElementById('card-q').textContent = card.question;
+  document.getElementById('card-a').textContent = card.answer;
+  document.getElementById('review-progress').textContent =
+    `${reviewIdx + 1} / ${reviewCards.length}`;
+
+  // 重置翻转 & 隐藏评分按钮
+  document.getElementById('card-flip').classList.remove('flipped');
+  document.querySelectorAll('.rating-btn').forEach(b => b.classList.remove('visible'));
+}
+
+function flipCard() {
+  document.getElementById('card-flip').classList.toggle('flipped');
+  // 翻面后显示评分按钮
+  if (document.getElementById('card-flip').classList.contains('flipped')) {
+    document.querySelectorAll('.rating-btn').forEach(b => b.classList.add('visible'));
+  }
+}
+
+async function rate(rating) {
+  const card = reviewCards[reviewIdx];
+  try {
+    await req('POST', '/plan/review', { cardId: card.id, rating });
+    reviewIdx++;
+    showCard();
+  } catch { toast('❌ 提交失败'); }
+}
+
+// ── 初始化 ───────────────────────────────────
+loadDecks();
+</script>
+</body>
+</html>
