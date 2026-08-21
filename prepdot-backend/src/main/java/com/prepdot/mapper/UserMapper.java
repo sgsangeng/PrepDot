@@ -25,17 +25,6 @@ public interface UserMapper extends BaseMapper<User> {
     List<Map<String, Object>> weeklyStats(@Param("userId") Long userId);
 
     @Select("""
-        SELECT
-          SUM(CASE WHEN f.memory_score < 40  THEN 1 ELSE 0 END) AS low,
-          SUM(CASE WHEN f.memory_score BETWEEN 40 AND 69 THEN 1 ELSE 0 END) AS mid,
-          SUM(CASE WHEN f.memory_score >= 70 THEN 1 ELSE 0 END) AS high
-        FROM flashcard f
-        JOIN deck d ON f.deck_id = d.id
-        WHERE #{userId} IS NULL OR d.user_id = #{userId}
-        """)
-    Map<String, Object> memoryDistribution(@Param("userId") Long userId);
-
-    @Select("""
         SELECT COUNT(*)
         FROM review_record rr
         JOIN flashcard f ON rr.card_id = f.id

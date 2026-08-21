@@ -43,7 +43,9 @@ CREATE TABLE IF NOT EXISTS flashcard (
     card_type        VARCHAR(20)  NOT NULL DEFAULT 'qa'              COMMENT '卡片类型：qa/choice/blank',
     options          TEXT                                            COMMENT '选择题选项JSON',
     category         VARCHAR(50)  NOT NULL DEFAULT '综合'            COMMENT '分类',
-    memory_score     INT          NOT NULL DEFAULT 35                COMMENT '记忆度 0-100',
+    memory_score     INT          NOT NULL DEFAULT 35                COMMENT '记忆度 0-100（实时计算展示用）',
+    difficulty       DOUBLE                                          COMMENT 'FSRS 难度 1-10，未复习为 NULL',
+    stability        DOUBLE                                          COMMENT 'FSRS 稳定性(天)，未复习为 NULL',
     review_count     INT          NOT NULL DEFAULT 0                 COMMENT '复习次数',
     last_reviewed_at DATETIME                                        COMMENT '上次复习时间',
     next_review_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '下次复习时间',
@@ -83,6 +85,36 @@ CREATE TABLE IF NOT EXISTS review_record (
     memory_score_after   INT         NOT NULL COMMENT '复习后记忆度',
     reviewed_at          DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_record_card FOREIGN KEY (card_id) REFERENCES flashcard(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ===================== Agent 执行轨迹 =====================
+CREATE TABLE IF NOT EXISTS agent_run (
+    id            BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id       BIGINT       NOT NULL COMMENT '发起用户',
+    task_type     VARCHAR(50)  NOT NULL COMMENT '任务类型',
+    input         TEXT         NOT NULL COMMENT '用户原始输入',
+    output        MEDIUMTEXT            COMMENT 'Agent 最终输出',
+    status        VARCHAR(20)  NOT NULL COMMENT 'RUNNING/SUCCEEDED/FAILED',
+    step_count    INT          NOT NULL DEFAULT 0,
+    error_message TEXT                  COMMENT '失败原因',
+    started_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at   DATETIME              COMMENT '结束时间',
+    INDEX idx_agent_run_user_started (user_id, started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS agent_step (
+    id             BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    run_id         BIGINT       NOT NULL COMMENT '所属运行',
+    step_no        INT          NOT NULL COMMENT '运行内步骤序号',
+    step_type      VARCHAR(20)  NOT NULL COMMENT 'MODEL/TOOL',
+    model_content  MEDIUMTEXT            COMMENT '模型思考后的可见内容',
+    tool_name      VARCHAR(100)           COMMENT '工具名',
+    tool_arguments TEXT                   COMMENT '工具参数 JSON',
+    tool_result    MEDIUMTEXT             COMMENT '工具结果',
+    duration_ms    BIGINT                 COMMENT '步骤耗时',
+    created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_agent_step_run FOREIGN KEY (run_id) REFERENCES agent_run(id) ON DELETE CASCADE,
+    UNIQUE KEY uk_agent_step_run_no (run_id, step_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ===================== 应用设置表 =====================

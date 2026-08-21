@@ -29,6 +29,12 @@ public class Flashcard {
     /** 记忆度 0-100 */
     private Integer memoryScore;
 
+    /** FSRS 难度 1-10，尚未复习时为空 */
+    private Double difficulty;
+
+    /** FSRS 稳定性（天），尚未复习时为空 */
+    private Double stability;
+
     /** 复习次数 */
     private Integer reviewCount;
 

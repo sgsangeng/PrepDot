@@ -2,11 +2,14 @@ package com.prepdot.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.prepdot.common.BusinessException;
+import com.prepdot.algorithm.FsrsScheduler;
+import com.prepdot.algorithm.FsrsState;
 import com.prepdot.dto.request.ReviewRequest;
 import com.prepdot.dto.response.TodayPlanVO;
 import com.prepdot.entity.*;
 import com.prepdot.mapper.*;
 import com.prepdot.service.PlanService;
+import com.prepdot.service.FsrsMemoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +32,8 @@ public class PlanServiceImpl implements PlanService {
     private final FlashcardMapper     flashcardMapper;
     private final ReviewRecordMapper  reviewRecordMapper;
     private final DeckMapper          deckMapper;
+    private final FsrsScheduler       fsrsScheduler;
+    private final FsrsMemoryService   fsrsMemoryService;
 
     @Override
     @Transactional
@@ -54,6 +59,8 @@ public class PlanServiceImpl implements PlanService {
 
         List<Long> cardIds = items.stream().map(DailyPlanItem::getCardId).collect(Collectors.toList());
         List<Flashcard> cards = cardIds.isEmpty() ? List.of() : flashcardMapper.selectBatchIds(cardIds);
+        LocalDateTime now = LocalDateTime.now();
+        cards.forEach(card -> card.setMemoryScore(fsrsMemoryService.currentScore(card, now)));
 
         TodayPlanVO vo = new TodayPlanVO();
         vo.setPlanId(plan.getId());
@@ -82,24 +89,31 @@ public class PlanServiceImpl implements PlanService {
             throw BusinessException.forbidden("无权操作该卡片");
         }
 
-        int scoreBefore = card.getMemoryScore() != null ? card.getMemoryScore() : 35;
+        LocalDateTime now = LocalDateTime.now();
+        int scoreBefore = fsrsMemoryService.currentScore(card, now);
         int reviewCount = card.getReviewCount()  != null ? card.getReviewCount()  : 0;
-
-        int delta, days;
-        switch (request.getRating()) {
-            case "again" -> { delta = -18; days = 0; }
-            case "hard"  -> { delta =   3; days = 1; }
-            case "good"  -> { delta =  12; days = reviewCount < 2 ? 2 : 4; }
-            case "easy"  -> { delta =  20; days = reviewCount < 2 ? 5 : 10; }
-            default      -> throw new RuntimeException("无效评分"); // 不会到达，上面已校验
+        int rating = switch (request.getRating()) {
+            case "again" -> 1; case "hard" -> 2; case "good" -> 3; case "easy" -> 4;
+            default -> throw BusinessException.badRequest("无效评分");
+        };
+        FsrsState nextState;
+        if (card.getDifficulty() == null || card.getStability() == null || card.getLastReviewedAt() == null) {
+            nextState = fsrsScheduler.initialState(rating);
+        } else {
+            double elapsedDays = fsrsMemoryService.elapsedDays(card.getLastReviewedAt(), now);
+            nextState = fsrsScheduler.reviewExisting(
+                    new FsrsState(card.getDifficulty(), card.getStability()), rating, elapsedDays);
         }
+        int days = fsrsScheduler.nextIntervalDays(nextState.stability());
+        int scoreAfter = 100;
 
-        int scoreAfter = Math.max(0, Math.min(100, scoreBefore + delta));
-
+        card.setDifficulty(nextState.difficulty());
+        card.setStability(nextState.stability());
         card.setMemoryScore(scoreAfter);
         card.setReviewCount(reviewCount + 1);
-        card.setLastReviewedAt(LocalDateTime.now());
-        card.setNextReviewAt(days == 0 ? LocalDateTime.now() : LocalDateTime.now().plusDays(days));
+        card.setLastReviewedAt(now);
+        // again 属于短期重新学习步骤：沿用产品原有行为，立即重新进入到期队列。
+        card.setNextReviewAt(rating == 1 ? now : now.plusDays(days));
         flashcardMapper.updateById(card);
 
         // 写复习记录（携带 userId）

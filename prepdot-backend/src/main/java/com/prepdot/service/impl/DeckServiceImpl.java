@@ -10,6 +10,7 @@ import com.prepdot.entity.Flashcard;
 import com.prepdot.mapper.DeckMapper;
 import com.prepdot.mapper.FlashcardMapper;
 import com.prepdot.service.DeckService;
+import com.prepdot.service.FsrsMemoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ public class DeckServiceImpl implements DeckService {
 
     private final DeckMapper deckMapper;
     private final FlashcardMapper flashcardMapper;
+    private final FsrsMemoryService fsrsMemoryService;
 
     @Override
     public List<DeckVO> listAll(Long userId) {
@@ -178,11 +180,14 @@ public class DeckServiceImpl implements DeckService {
 
     @Override
     public List<Flashcard> listCards(Long deckId) {
-        return flashcardMapper.selectList(
+        List<Flashcard> cards = flashcardMapper.selectList(
                 new LambdaQueryWrapper<Flashcard>()
                         .eq(Flashcard::getDeckId, deckId)
                         .orderByAsc(Flashcard::getCreatedAt)
         );
+        LocalDateTime now = LocalDateTime.now();
+        cards.forEach(card -> card.setMemoryScore(fsrsMemoryService.currentScore(card, now)));
+        return cards;
     }
 
     // ---- 私有辅助 ----
@@ -207,7 +212,7 @@ public class DeckServiceImpl implements DeckService {
                 .count());
         vo.setAvgMemoryScore(cards.isEmpty() ? 0 :
                 (int) cards.stream()
-                        .mapToInt(c -> c.getMemoryScore() != null ? c.getMemoryScore() : 35)
+                        .mapToInt(c -> fsrsMemoryService.currentScore(c, LocalDateTime.now()))
                         .average()
                         .orElse(0));
         return vo;

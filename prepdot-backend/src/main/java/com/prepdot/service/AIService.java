@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import com.prepdot.service.FsrsMemoryService;
 
 import java.io.*;
 import java.net.URI;
@@ -44,6 +45,7 @@ public class AIService {
 
     @Autowired private FlashcardMapper flashcardMapper;
     @Autowired private DeckMapper      deckMapper;
+    @Autowired private FsrsMemoryService fsrsMemoryService;
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -272,7 +274,7 @@ public class AIService {
                 long cardId = Long.parseLong(n.path("id").asText());
                 Flashcard card = cardMap.get(cardId);
                 if (card != null) {
-                    node.setMemoryScore(card.getMemoryScore() != null ? card.getMemoryScore() : 35);
+                    node.setMemoryScore(fsrsMemoryService.currentScore(card, java.time.LocalDateTime.now()));
                     node.setReviewCount(card.getReviewCount() != null ? card.getReviewCount() : 0);
                 }
             } catch (NumberFormatException ignored) {}

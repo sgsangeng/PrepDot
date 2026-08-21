@@ -10,6 +10,7 @@ import com.prepdot.mapper.DeckMapper;
 import com.prepdot.mapper.FlashcardMapper;
 import com.prepdot.mapper.UserMapper;
 import com.prepdot.util.JwtUtil;
+import com.prepdot.service.FsrsMemoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.Data;
@@ -32,6 +33,7 @@ public class AuthController {
     private final DeckMapper      deckMapper;
     private final FlashcardMapper flashcardMapper;
     private final JwtUtil         jwtUtil;
+    private final FsrsMemoryService fsrsMemoryService;
 
     private static final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
@@ -116,14 +118,21 @@ public class AuthController {
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.prepdot.entity.Flashcard>()
                     .in(com.prepdot.entity.Flashcard::getDeckId, deckIds)
             );
+            var now = java.time.LocalDateTime.now();
+            var scores = cards.stream().map(c -> fsrsMemoryService.currentScore(c, now)).toList();
             vo.setTotalCards(cards.size());
-            vo.setAvgMemoryScore(cards.isEmpty() ? 0 :
-                (int) cards.stream().mapToInt(c -> c.getMemoryScore() != null ? c.getMemoryScore() : 35)
-                           .average().orElse(0));
+            vo.setAvgMemoryScore(scores.isEmpty() ? 0 :
+                    (int) scores.stream().mapToInt(Integer::intValue).average().orElse(0));
+            vo.setMemoryDistribution(Map.of(
+                    "low", scores.stream().filter(score -> score < 40).count(),
+                    "mid", scores.stream().filter(score -> score >= 40 && score < 70).count(),
+                    "high", scores.stream().filter(score -> score >= 70).count()));
         }
 
         vo.setWeeklyData(userMapper.weeklyStats(userId));
-        vo.setMemoryDistribution(userMapper.memoryDistribution(userId));
+        if (vo.getMemoryDistribution() == null) {
+            vo.setMemoryDistribution(Map.of("low", 0, "mid", 0, "high", 0));
+        }
         return Result.success(vo);
     }
 
