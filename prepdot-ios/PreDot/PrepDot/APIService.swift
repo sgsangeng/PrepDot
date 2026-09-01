@@ -13,6 +13,9 @@ class APIService {
     /// 登录后的 JWT token（由 AuthManager 注入）
     var token: String? = UserDefaults.standard.string(forKey: "jwt_token")
 
+    /// 是否正在刷新中（防止并发重复刷新）
+    private var isRefreshing = false
+
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()
         d.keyDecodingStrategy = .convertFromSnakeCase
@@ -23,15 +26,91 @@ class APIService {
         URL(string: base + path)!
     }
 
+    // MARK: - Token 续期
+
+    /// 解码 JWT payload 获取过期时间（不需要 secret，只读 base64）
+    private func tokenExpiryDate(_ token: String) -> Date? {
+        // JWT 格式: header.payload.signature，payload 是第二段
+        let parts = token.split(separator: ".")
+        guard parts.count >= 2 else { return nil }
+        var base64 = String(parts[1])
+        // 补齐 base64 padding
+        while base64.count % 4 != 0 { base64 += "=" }
+        guard let data = Data(base64Encoded: base64),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let exp = json["exp"] as? TimeInterval
+        else { return nil }
+        return Date(timeIntervalSince1970: exp)
+    }
+
+    /// 检查 token 是否即将过期（剩余时间不足总时长的一半）
+    private func isTokenExpiringSoon() -> Bool {
+        guard let t = token,
+              let expiry = tokenExpiryDate(t)
+        else { return true }
+        let remaining = expiry.timeIntervalSinceNow
+        let total = expiry.timeIntervalSinceNow + (7 * 24 * 3600) // 粗算：假设 7 天有效期
+        return remaining < total * 0.5
+    }
+
+    /// 调用后端刷新接口获取新 token
+    @discardableResult
+    func refreshToken() async throws -> AuthResponse {
+        guard !isRefreshing else { throw URLError(.cannotLoadFromNetwork) }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        var req = URLRequest(url: url("/auth/refresh"))
+        req.httpMethod = "POST"
+        if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        let (data, response) = try await URLSession.shared.data(for: req)
+        // 刷新接口本身也可能返回 401（token 已经过期太久）
+        if let http = response as? HTTPURLResponse, http.statusCode == 401 {
+            AuthManager.shared.logout()
+            throw URLError(.userAuthenticationRequired)
+        }
+        let result = try decoder.decode(APIResult<AuthResponse>.self, from: data)
+        guard let value = result.data else {
+            throw URLError(.badServerResponse)
+        }
+        // 自动更新本地存储和内存中的 token
+        AuthManager.shared.login(with: value)
+        return value
+    }
+
+    /// 如果 token 快过期了就自动续期（静默）
+    @discardableResult
+    func tryAutoRefreshIfNeeded() async throws -> Bool {
+        guard !isRefreshing, isTokenExpiringSoon() else { return false }
+        do {
+            _ = try await refreshToken()
+            print("[APIService] Token 已自动续期")
+            return true
+        } catch {
+            print("[APIService] 自动续期失败: \(error)")
+            return false
+        }
+    }
+
     // MARK: - 通用 GET
     private func get<T: Decodable>(_ path: String) async throws -> T {
         var req = URLRequest(url: url(path))
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await URLSession.shared.data(for: req)
+
+        // 处理 401：token 过期或无效 → 强制登出
+        if let http = response as? HTTPURLResponse, http.statusCode == 401 {
+            AuthManager.shared.logout()
+            throw URLError(.userAuthenticationRequired)
+        }
+
         let result = try decoder.decode(APIResult<T>.self, from: data)
         guard let value = result.data else {
             throw URLError(.badServerResponse)
         }
+
+        // 请求成功后检查是否需要自动续期
+        _ = try? await tryAutoRefreshIfNeeded()
+
         return value
     }
 
@@ -61,11 +140,22 @@ class APIService {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await URLSession.shared.data(for: req)
+
+        // 处理 401：token 过期或无效 → 强制登出
+        if let http = response as? HTTPURLResponse, http.statusCode == 401 {
+            AuthManager.shared.logout()
+            throw URLError(.userAuthenticationRequired)
+        }
+
         let result = try decoder.decode(APIResult<T>.self, from: data)
         guard let value = result.data else {
             throw URLError(.badServerResponse)
         }
+
+        // 请求成功后检查是否需要自动续期
+        _ = try? await tryAutoRefreshIfNeeded()
+
         return value
     }
 

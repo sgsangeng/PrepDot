@@ -136,6 +136,17 @@ public class AuthController {
         return Result.success(vo);
     }
 
+    // ── Token 续期（滑动续期：只要用户还在用，就自动续 7 天） ──
+    @Operation(summary = "Token 续期（需携带有效 Token）")
+    @PostMapping("/refresh")
+    public Result<AuthVO> refresh() {
+        Long userId = UserContext.getUserId();
+        User user = userMapper.selectById(userId);
+        if (user == null) return Result.error("用户不存在");
+        log.info("用户 {} 续期成功", user.getUsername());
+        return Result.success(buildAuthVO(user));
+    }
+
     // ── 更新个人信息 ──────────────────────────────
     @Operation(summary = "更新个人信息")
     @PutMapping("/profile")

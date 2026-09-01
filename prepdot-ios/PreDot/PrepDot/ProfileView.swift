@@ -18,7 +18,10 @@ struct ProfileView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                if loading {
+                if !auth.isLoggedIn {
+                    // 未登录：显示登录入口
+                    loginPromptSection
+                } else if loading {
                     ProgressView("加载中…").padding(.top, 60)
                 } else if let s = stats {
                     avatarSection
@@ -26,6 +29,10 @@ struct ProfileView: View {
                     overviewGrid(s)
                     weeklyChart(s)
                     memorySection(s)
+                }
+
+                // 设置区（含退出登录）始终显示，不依赖数据加载成功
+                if auth.isLoggedIn {
                     settingsSection
                 }
             }
@@ -36,6 +43,30 @@ struct ProfileView: View {
         .navigationBarTitleDisplayMode(.large)
         .refreshable { await loadStats() }
         .task { await loadStats() }
+    }
+
+    // MARK: - 未登录提示
+
+    private var loginPromptSection: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "person.circle")
+                .font(.system(size: 48))
+                .foregroundColor(.secondary)
+            Text("请先登录以查看学习数据")
+                .font(.body)
+                .foregroundColor(.secondary)
+            NavigationLink {
+                LoginView()
+            } label: {
+                Text("去登录")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 12)
+                    .background(Color.indigo, in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+        .padding(.top, 60)
     }
 
     // MARK: - 头像区
@@ -204,7 +235,13 @@ struct ProfileView: View {
     @MainActor
     private func loadStats() async {
         loading = true
-        if let s = try? await APIService.shared.fetchStats() { stats = s }
+        do {
+            stats = try await APIService.shared.fetchStats()
+        } catch {
+            // 401 等错误会被 APIService 自动处理（触发 logout），
+            // 这里只负责清空 stats 让 UI 显示"未登录"或空状态
+            stats = nil
+        }
         loading = false
     }
 
