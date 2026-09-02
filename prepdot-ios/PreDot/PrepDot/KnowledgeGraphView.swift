@@ -1,67 +1,85 @@
 import SwiftUI
+import Foundation
 
-// MARK: - 布局节点
-
-private struct GNode: Identifiable {
-    let id: String
-    let label: String
-    let isRoot: Bool
-    let memoryScore: Int
-    let reviewCount: Int
-    var pos: CGPoint = .zero          // 相对图心坐标
-    let wobble: Double = Double.random(in: 0 ..< 2 * .pi)
-}
-
-private struct GEdge {
-    let source: String
-    let target: String
-}
-
-/// 单个卡组的图谱数据
-private struct DeckGraph: Identifiable {
-    let id: Int          // 根卡组 id
-    let title: String
-    var nodes: [GNode]
-    var edges: [GEdge]
-}
-
-// MARK: - 知识图谱整页视图（每卡组一张独立图）
+// MARK: - 掌握度散点图
+//
+// 每个点代表一张卡片：
+// - X 轴 = FSRS 难度 difficulty（1-10）
+// - Y 轴 = FSRS 稳定性 stability（天，log 刻度）
+// - 颜色 = 实时掌握度 retrievability（浅粉→深紫）
+//
+// 点落在右上角 = 简单 + 稳定 = 已掌握；左下角 = 难 + 不稳 = 需抢救。
+// 相比原来的力导向卡组层级图，这里不用 AI 语义边，也不跑力导向迭代，
+// 位置直接由 FSRS 状态映射，一张图就能看出整个卡组的记忆健康度。
 
 struct KnowledgeGraphView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    @State private var graphs:   [DeckGraph] = []
-    @State private var selectedGraphIndex = 0
-    @State private var loading   = true
-    @State private var errorMsg  = ""
-    @State private var selectedNode: GNode? = nil
-    @State private var appeared  = false
+    @State private var rootDecks: [Deck] = []
+    @State private var selectedRootIndex = 0
+    @State private var cards: [Flashcard] = []
 
-    @State private var pan:      CGSize  = .zero
-    @State private var lastPan:  CGSize  = .zero
-    @State private var zoom:     CGFloat = 1.0
-    @State private var lastZoom: CGFloat = 1.0
+    @State private var loading = true          // 卡组列表加载
+    @State private var cardsLoading = false     // 卡片加载
+    @State private var errorMsg = ""
+    @State private var selectedCard: Flashcard? = nil
 
-    private var currentGraph: DeckGraph? {
-        graphs.indices.contains(selectedGraphIndex) ? graphs[selectedGraphIndex] : nil
+    // MARK: - 派生数据
+
+    /// 只绘制已经复习过（有 difficulty/stability）的卡片
+    private var plotCards: [Flashcard] {
+        cards.filter { $0.difficulty != nil && $0.stability != nil }
     }
 
-    // MARK: - 辅助
-
-    private func toScreen(_ p: CGPoint, in size: CGSize) -> CGPoint {
-        CGPoint(
-            x: size.width  / 2 + (p.x + pan.width)  * zoom,
-            y: size.height / 2 + (p.y + pan.height) * zoom
-        )
+    /// log10(稳定性) 的范围，用于 Y 轴归一化
+    private var logStabilityRange: (min: Double, max: Double) {
+        let logs = plotCards.map { log10(max($0.stability ?? 0.01, 0.01)) }
+        guard let mn = logs.min(), let mx = logs.max() else { return (0, 1) }
+        if mn == mx { return (mn - 0.5, mx + 0.5) }
+        return (mn, mx)
     }
 
-    private func radius(for n: GNode) -> CGFloat {
-        n.isRoot ? 30 : 20 + CGFloat(min(n.reviewCount, 30)) * 0.4
+    // MARK: - 坐标与颜色
+
+    private func plotArea(in size: CGSize) -> CGRect {
+        let padX: CGFloat = 46
+        let padTop: CGFloat = 16
+        let padBottom: CGFloat = 34
+        return CGRect(x: padX, y: padTop,
+                      width: max(size.width - padX * 2, 0),
+                      height: max(size.height - padTop - padBottom, 0))
     }
 
-    private func color(for n: GNode) -> Color {
-        let t = CGFloat(max(0, min(100, n.memoryScore))) / 100.0
+    /// 由 id 派生的确定性抖动（0-1），用来摊开重合的点，避免同一状态的卡片叠成一坨
+    private func jitter(for id: Int) -> CGPoint {
+        func hash(_ seed: Double) -> Double {
+            let s = sin(seed) * 43758.5453
+            return s - floor(s)          // 0..1
+        }
+        let jx = (hash(Double(id) * 12.9898) - 0.5) * 2   // -1..1
+        let jy = (hash(Double(id) * 78.233)  - 0.5) * 2
+        return CGPoint(x: CGFloat(jx) * 6, y: CGFloat(jy) * 6)   // ±6pt
+    }
+
+    private func point(for card: Flashcard, in size: CGSize) -> CGPoint {
+        let area = plotArea(in: size)
+        let d = card.difficulty ?? 5.0
+        let s = max(card.stability ?? 0.01, 0.01)
+        let logS = log10(s)
+        let (mn, mx) = logStabilityRange
+
+        let nx = min(max((d - 1.0) / 9.0, 0), 1)                       // 难度 1-10 → 0-1
+        let ny = min(max((logS - mn) / max(mx - mn, 0.001), 0), 1)     // log 稳定性 → 0-1
+
+        let j = jitter(for: card.id)
+        let x = area.minX + CGFloat(nx) * area.width + j.x
+        let y = area.maxY - CGFloat(ny) * area.height + j.y            // 反向：高稳定性在顶部
+        return CGPoint(x: x, y: y)
+    }
+
+    private func color(forScore score: Int) -> Color {
+        let t = CGFloat(max(0, min(100, score))) / 100.0
         return Color(red: 0.85 - t * 0.50, green: 0.38 - t * 0.10, blue: 0.82 + t * 0.14)
     }
 
@@ -69,35 +87,38 @@ struct KnowledgeGraphView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !graphs.isEmpty && !loading {
+            if !rootDecks.isEmpty && !loading {
                 deckPicker
+                statsBar
             }
 
             GeometryReader { geo in
                 ZStack {
                     Color(.systemBackground).ignoresSafeArea()
 
-                    if loading {
+                    if loading || cardsLoading {
                         loadingView
                     } else if !errorMsg.isEmpty {
                         ContentUnavailableView("加载失败",
                                                systemImage: "exclamationmark.triangle.fill",
                                                description: Text(errorMsg))
-                    } else if graphs.isEmpty {
-                        ContentUnavailableView("暂无图谱",
-                                               systemImage: "point.3.connected.trianglepath.dotted",
-                                               description: Text("添加卡组后将自动生成"))
-                    } else if let g = currentGraph {
-                        TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
-                            graphCanvas(graph: g, in: geo.size,
-                                        t: ctx.date.timeIntervalSinceReferenceDate)
-                        }
-                        .scaleEffect(appeared ? 1.0 : 0.85)
-                        .opacity(appeared ? 1.0 : 0)
-                        .id(g.id)   // 切换卡组时重新触发入场
+                    } else if rootDecks.isEmpty {
+                        ContentUnavailableView("暂无卡组",
+                                               systemImage: "square.grid.2x2",
+                                               description: Text("先创建卡组，再回来查看掌握度地图"))
+                    } else if cards.isEmpty {
+                        ContentUnavailableView("该卡组暂无卡片",
+                                               systemImage: "rectangle.stack",
+                                               description: Text("添加卡片并完成首次复习后，这里会出现掌握度分布"))
+                    } else if plotCards.isEmpty {
+                        ContentUnavailableView("还没有复习记录",
+                                               systemImage: "sparkles",
+                                               description: Text("完成第一次复习后，卡片会按难度/稳定性出现在图上"))
+                    } else {
+                        scatter(in: geo.size)
                     }
 
-                    if !graphs.isEmpty && !loading {
+                    if !plotCards.isEmpty && !loading && !cardsLoading {
                         legend
                             .padding(10)
                             .frame(maxWidth: .infinity, maxHeight: .infinity,
@@ -106,13 +127,13 @@ struct KnowledgeGraphView: View {
                 }
             }
 
-            if let sel = selectedNode {
+            if let sel = selectedCard {
                 detailPanel(sel)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: selectedNode?.id)
-        .navigationTitle("知识图谱")
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: selectedCard?.id)
+        .navigationTitle("掌握度地图")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -120,15 +141,11 @@ struct KnowledgeGraphView: View {
             }
         }
         .task { await load() }
-        .onChange(of: loading) { _, val in
-            if !val && !graphs.isEmpty { triggerAppear() }
-        }
-    }
-
-    private func triggerAppear() {
-        appeared = false
-        withAnimation(.spring(response: 0.55, dampingFraction: 0.75)) {
-            appeared = true
+        .onChange(of: selectedRootIndex) { _, newIdx in
+            if rootDecks.indices.contains(newIdx) {
+                selectedCard = nil
+                Task { await loadCards(for: rootDecks[newIdx]) }
+            }
         }
     }
 
@@ -138,17 +155,14 @@ struct KnowledgeGraphView: View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(Array(graphs.enumerated()), id: \.element.id) { idx, g in
-                        let isSel = idx == selectedGraphIndex
+                    ForEach(Array(rootDecks.enumerated()), id: \.element.id) { idx, deck in
+                        let isSel = idx == selectedRootIndex
                         Button {
-                            guard idx != selectedGraphIndex else { return }
-                            selectedNode = nil
-                            resetView()
-                            selectedGraphIndex = idx
-                            triggerAppear()
-                            withAnimation { proxy.scrollTo(g.id, anchor: .center) }
+                            guard idx != selectedRootIndex else { return }
+                            withAnimation { proxy.scrollTo(deck.id, anchor: .center) }
+                            selectedRootIndex = idx
                         } label: {
-                            Text(g.title)
+                            Text(deck.title)
                                 .font(.subheadline.weight(isSel ? .semibold : .regular))
                                 .foregroundColor(isSel ? .white : .primary)
                                 .padding(.horizontal, 14).padding(.vertical, 8)
@@ -161,7 +175,7 @@ struct KnowledgeGraphView: View {
                                 )
                         }
                         .buttonStyle(.plain)
-                        .id(g.id)
+                        .id(deck.id)
                     }
                 }
                 .padding(.horizontal, 14)
@@ -171,140 +185,113 @@ struct KnowledgeGraphView: View {
         .background(Color(.systemBackground))
     }
 
+    private var statsBar: some View {
+        HStack(spacing: 14) {
+            Label("已复习 \(plotCards.count) / \(cards.count) 张", systemImage: "checkmark.circle")
+            Spacer()
+            if plotCards.count < cards.count {
+                Text("\(cards.count - plotCards.count) 张待复习")
+                    .foregroundColor(.secondary)
+            }
+        }
+        .font(.caption)
+        .foregroundColor(.secondary)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 6)
+    }
+
     // MARK: - 加载动画
 
     private var loadingView: some View {
         VStack(spacing: 18) {
-            ZStack {
-                ForEach(0 ..< 3) { i in
-                    Circle()
-                        .stroke(Color.indigo.opacity(0.18 - Double(i) * 0.04), lineWidth: 1.5)
-                        .frame(width: CGFloat(52 + i * 26), height: CGFloat(52 + i * 26))
-                }
-                Image(systemName: "point.3.connected.trianglepath.dotted")
-                    .font(.system(size: 22)).foregroundColor(.indigo)
-            }
-            Text("构建知识图谱…").font(.headline)
             ProgressView().tint(.indigo)
+            Text("生成掌握度地图…").font(.headline)
         }
     }
 
-    // MARK: - 图谱画布（单卡组）
+    // MARK: - 散点画布
 
-    private func graphCanvas(graph g: DeckGraph, in size: CGSize, t: Double) -> some View {
-        ZStack {
-            // ── 直线连接
-            Canvas { ctx, sz in
-                for e in g.edges {
-                    guard let src = g.nodes.first(where: { $0.id == e.source }),
-                          let tgt = g.nodes.first(where: { $0.id == e.target }) else { continue }
-                    let sp = toScreen(wobbled(src, t: t), in: sz)
-                    let tp = toScreen(wobbled(tgt, t: t), in: sz)
-                    var path = Path()
-                    path.move(to: sp)
-                    path.addLine(to: tp)
-                    ctx.stroke(path,
-                               with: .color(Color.indigo.opacity(0.3)),
-                               style: StrokeStyle(lineWidth: 2, lineCap: .round))
+    private func scatter(in size: CGSize) -> some View {
+        let area = plotArea(in: size)
+        return ZStack {
+            // 网格 + 坐标轴
+            Canvas { ctx, _ in
+                for i in 0...4 {
+                    let fx = area.minX + area.width * CGFloat(i) / 4
+                    var v = Path()
+                    v.move(to: CGPoint(x: fx, y: area.minY))
+                    v.addLine(to: CGPoint(x: fx, y: area.maxY))
+                    ctx.stroke(v, with: .color(Color(.systemGray5)), lineWidth: 0.5)
+
+                    let fy = area.minY + area.height * CGFloat(i) / 4
+                    var h = Path()
+                    h.move(to: CGPoint(x: area.minX, y: fy))
+                    h.addLine(to: CGPoint(x: area.maxX, y: fy))
+                    ctx.stroke(h, with: .color(Color(.systemGray5)), lineWidth: 0.5)
+                }
+                var ax = Path()
+                ax.move(to: CGPoint(x: area.minX, y: area.maxY))
+                ax.addLine(to: CGPoint(x: area.maxX, y: area.maxY))
+                ctx.stroke(ax, with: .color(Color.secondary.opacity(0.5)), lineWidth: 1)
+
+                var ay = Path()
+                ay.move(to: CGPoint(x: area.minX, y: area.minY))
+                ay.addLine(to: CGPoint(x: area.minX, y: area.maxY))
+                ctx.stroke(ay, with: .color(Color.secondary.opacity(0.5)), lineWidth: 1)
+            }
+
+            // 轴标签
+            Text("难度 →").font(.caption2).foregroundColor(.secondary)
+                .position(x: area.maxX - 20, y: area.maxY + 14)
+            Text("稳定性 ↑").font(.caption2).foregroundColor(.secondary)
+                .rotationEffect(.degrees(-90))
+                .position(x: area.minX - 16, y: area.midY)
+
+            // 节点
+            ForEach(plotCards) { card in
+                node(card, in: size)
+            }
+        }
+    }
+
+    private func node(_ card: Flashcard, in size: CGSize) -> some View {
+        let p = point(for: card, in: size)
+        let c = color(forScore: card.memoryScore)
+        let sel = selectedCard?.id == card.id
+        return Circle()
+            .fill(c.opacity(sel ? 1.0 : 0.72))
+            .frame(width: sel ? 22 : 14, height: sel ? 22 : 14)
+            .overlay(Circle().stroke(sel ? Color.white : Color.clear, lineWidth: 2))
+            .shadow(color: c.opacity(sel ? 0.5 : 0.15), radius: sel ? 8 : 3)
+            .scaleEffect(sel ? 1.15 : 1.0)
+            .position(p)
+            .onTapGesture {
+                withAnimation(.spring(response: 0.22, dampingFraction: 0.7)) {
+                    selectedCard = selectedCard?.id == card.id ? nil : card
                 }
             }
-
-            // ── 节点
-            ForEach(g.nodes) { n in
-                let sp  = toScreen(wobbled(n, t: t), in: size)
-                let r   = radius(for: n)
-                let c   = color(for: n)
-                let sel = selectedNode?.id == n.id
-
-                Circle()
-                    .fill(c)
-                    .frame(width: r * 2, height: r * 2)
-                    .overlay(Circle().stroke(
-                        sel ? Color.white : Color.white.opacity(0.4),
-                        lineWidth: sel ? 2.5 : 1.2
-                    ))
-                    .shadow(color: c.opacity(sel ? 0.55 : 0.2),
-                            radius: sel ? 12 : 4, y: 2)
-                    .scaleEffect(sel ? 1.18 : 1.0)
-                    .animation(.spring(response: 0.22, dampingFraction: 0.7), value: sel)
-                    .position(sp)
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.22, dampingFraction: 0.7)) {
-                            selectedNode = selectedNode?.id == n.id ? nil : n
-                        }
-                    }
-
-                Text(n.label)
-                    .font(.system(size: n.isRoot ? 13 : 11,
-                                  weight: n.isRoot ? .semibold : (sel ? .semibold : .regular)))
-                    .foregroundColor(sel || n.isRoot ? .primary : .secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 96)
-                    .shadow(color: Color(.systemBackground).opacity(0.9), radius: 5)
-                    .shadow(color: Color(.systemBackground).opacity(0.9), radius: 5)
-                    .position(CGPoint(x: sp.x, y: sp.y + r + 14))
-            }
-        }
-        .gesture(
-            SimultaneousGesture(
-                DragGesture()
-                    .onChanged { v in
-                        pan = CGSize(
-                            width:  lastPan.width  + v.translation.width  / zoom,
-                            height: lastPan.height + v.translation.height / zoom
-                        )
-                    }
-                    .onEnded { _ in lastPan = pan },
-                MagnificationGesture()
-                    .onChanged { v in zoom = max(0.4, min(4.0, lastZoom * v)) }
-                    .onEnded   { _ in lastZoom = zoom }
-            )
-        )
-    }
-
-    private func wobbled(_ n: GNode, t: Double) -> CGPoint {
-        CGPoint(
-            x: n.pos.x + CGFloat(sin(t * 0.42 + n.wobble)) * 2.0,
-            y: n.pos.y + CGFloat(cos(t * 0.33 + n.wobble)) * 1.5
-        )
-    }
-
-    private func resetView() {
-        pan = .zero; lastPan = .zero
-        zoom = 1.0; lastZoom = 1.0
     }
 
     // MARK: - 详情面板
 
-    private func detailPanel(_ n: GNode) -> some View {
-        let neighbors = (currentGraph?.edges ?? []).compactMap { e -> String? in
-            if e.source == n.id { return currentGraph?.nodes.first { $0.id == e.target }?.label }
-            if e.target == n.id { return currentGraph?.nodes.first { $0.id == e.source }?.label }
-            return nil
-        }
-        return VStack(alignment: .leading, spacing: 10) {
+    private func detailPanel(_ card: Flashcard) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Circle().fill(color(for: n)).frame(width: 9, height: 9)
-                Text(n.isRoot ? "卡组" : "子主题")
+                Circle().fill(color(forScore: card.memoryScore)).frame(width: 9, height: 9)
+                Text("掌握度 \(card.memoryScore)%")
                     .font(.caption).foregroundColor(.secondary)
                 Spacer()
-                Text("记忆度 \(n.memoryScore)%")
-                    .font(.caption2)
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(color(for: n).opacity(0.15), in: Capsule())
-                    .foregroundColor(color(for: n))
-                Button { withAnimation { selectedNode = nil } } label: {
+                Button { withAnimation { selectedCard = nil } } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.secondary).font(.title3)
                 }
             }
-            Text(n.label).font(.subheadline.bold())
-            if !neighbors.isEmpty {
-                Divider()
-                Text(n.isRoot ? "涵盖子主题" : "所属卡组")
-                    .font(.caption).foregroundColor(.secondary)
-                MiniTagFlow(labels: neighbors)
+            Text(card.question).font(.subheadline.bold()).lineLimit(4)
+            HStack(spacing: 16) {
+                stat("难度", String(format: "%.1f", card.difficulty ?? 0))
+                stat("稳定性", String(format: "%.1f 天", card.stability ?? 0))
+                stat("复习", "\(card.reviewCount) 次")
+                stat("类型", card.cardType)
             }
         }
         .padding(14)
@@ -312,6 +299,13 @@ struct KnowledgeGraphView: View {
         .shadow(color: .black.opacity(0.07), radius: 8, y: -2)
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
+    }
+
+    private func stat(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.caption2).foregroundColor(.secondary)
+            Text(value).font(.caption.weight(.semibold))
+        }
     }
 
     // MARK: - 图例
@@ -336,75 +330,34 @@ struct KnowledgeGraphView: View {
     // MARK: - 数据加载
 
     private func load() async {
-        loading = true; errorMsg = ""; appeared = false
+        loading = true; errorMsg = ""
         do {
-            let decks = try await APIService.shared.fetchDecks()
-            guard !decks.isEmpty else {
-                await MainActor.run { loading = false }
-                return
-            }
-            let built = buildGraphs(decks: decks)
+            let all = try await APIService.shared.fetchDecks()
+            let roots = all.filter { $0.parentId == nil }
             await MainActor.run {
-                graphs = built
-                selectedGraphIndex = 0
+                rootDecks = roots
                 loading = false
+                if !roots.isEmpty {
+                    selectedRootIndex = 0
+                    Task { await loadCards(for: roots[0]) }
+                }
             }
         } catch {
             await MainActor.run { errorMsg = error.localizedDescription; loading = false }
         }
     }
 
-    // MARK: - 构建每卡组独立图谱（放射状布局）
-
-    private func buildGraphs(decks: [Deck]) -> [DeckGraph] {
-        let rootDecks  = decks.filter { $0.parentId == nil }
-        let childDecks = decks.filter { $0.parentId != nil }
-
-        return rootDecks.map { root in
-            var nodes: [GNode] = []
-            var edges: [GEdge] = []
-
-            let rootId = "d-\(root.id)"
-            var rootNode = GNode(id: rootId, label: root.title, isRoot: true,
-                                 memoryScore: root.avgMemoryScore,
-                                 reviewCount: root.reviewedCount)
-            rootNode.pos = .zero          // 根节点居中
-            nodes.append(rootNode)
-
-            let children = childDecks.filter { $0.parentId == root.id }
-            let count    = children.count
-            // 半径随子节点数量增加，避免拥挤
-            let ringR: CGFloat = count <= 6 ? 150 : 150 + CGFloat(count - 6) * 12
-
-            for (i, child) in children.enumerated() {
-                let angle = 2 * Double.pi * Double(i) / Double(max(count, 1)) - Double.pi / 2
-                var cn = GNode(id: "d-\(child.id)", label: child.title, isRoot: false,
-                               memoryScore: child.avgMemoryScore,
-                               reviewCount: child.reviewedCount)
-                cn.pos = CGPoint(x: ringR * cos(angle), y: ringR * sin(angle))
-                nodes.append(cn)
-                edges.append(GEdge(source: rootId, target: cn.id))
+    private func loadCards(for deck: Deck) async {
+        cardsLoading = true; errorMsg = ""
+        do {
+            let c = try await APIService.shared.fetchCardsDeep(deckId: deck.id)
+            await MainActor.run {
+                cards = c
+                selectedCard = nil
+                cardsLoading = false
             }
-
-            return DeckGraph(id: root.id, title: root.title, nodes: nodes, edges: edges)
-        }
-    }
-}
-
-// MARK: - 标签流
-
-private struct MiniTagFlow: View {
-    let labels: [String]
-    var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 60))], alignment: .leading, spacing: 5) {
-            ForEach(labels, id: \.self) { lbl in
-                Text(lbl)
-                    .font(.caption2)
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(Color.indigo.opacity(0.1), in: Capsule())
-                    .foregroundColor(.indigo)
-                    .lineLimit(1)
-            }
+        } catch {
+            await MainActor.run { errorMsg = error.localizedDescription; cardsLoading = false }
         }
     }
 }

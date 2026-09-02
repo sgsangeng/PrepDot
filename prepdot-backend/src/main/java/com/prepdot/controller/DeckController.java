@@ -62,10 +62,11 @@ public class DeckController {
         return Result.success();
     }
 
-    @Operation(summary = "获取卡组内的所有卡片")
+    @Operation(summary = "获取卡组内的所有卡片（deep=true 时包含子卡组卡片）")
     @GetMapping("/{id}/cards")
-    public Result<List<Flashcard>> listCards(@PathVariable Long id) {
+    public Result<List<Flashcard>> listCards(@PathVariable Long id,
+                                             @RequestParam(required = false, defaultValue = "false") boolean deep) {
         checkOwner(id, UserContext.getUserId());
-        return Result.success(deckService.listCards(id));
+        return Result.success(deep ? deckService.listCardsDeep(id) : deckService.listCards(id));
     }
 }

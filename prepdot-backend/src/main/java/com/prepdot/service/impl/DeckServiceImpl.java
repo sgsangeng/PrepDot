@@ -16,8 +16,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -183,6 +187,40 @@ public class DeckServiceImpl implements DeckService {
         List<Flashcard> cards = flashcardMapper.selectList(
                 new LambdaQueryWrapper<Flashcard>()
                         .eq(Flashcard::getDeckId, deckId)
+                        .orderByAsc(Flashcard::getCreatedAt)
+        );
+        LocalDateTime now = LocalDateTime.now();
+        cards.forEach(card -> card.setMemoryScore(fsrsMemoryService.currentScore(card, now)));
+        return cards;
+    }
+
+    @Override
+    public List<Flashcard> listCardsDeep(Long deckId) {
+        // 一次查全量卡组，内存里建 parentId → children 映射，再 BFS 收集子树，
+        // 避免逐层查库的 N+1。卡组层级最多 3 层，内存遍历代价可忽略。
+        List<Deck> allDecks = deckMapper.selectList(null);
+        Map<Long, List<Long>> childrenMap = new HashMap<>();
+        for (Deck d : allDecks) {
+            if (d.getParentId() != null) {
+                childrenMap.computeIfAbsent(d.getParentId(), k -> new ArrayList<>()).add(d.getId());
+            }
+        }
+
+        List<Long> deckIds = new ArrayList<>();
+        Deque<Long> queue = new ArrayDeque<>();
+        queue.add(deckId);
+        while (!queue.isEmpty()) {
+            Long cur = queue.poll();
+            deckIds.add(cur);
+            queue.addAll(childrenMap.getOrDefault(cur, List.of()));
+        }
+
+        if (deckIds.isEmpty()) {
+            return List.of();
+        }
+        List<Flashcard> cards = flashcardMapper.selectList(
+                new LambdaQueryWrapper<Flashcard>()
+                        .in(Flashcard::getDeckId, deckIds)
                         .orderByAsc(Flashcard::getCreatedAt)
         );
         LocalDateTime now = LocalDateTime.now();

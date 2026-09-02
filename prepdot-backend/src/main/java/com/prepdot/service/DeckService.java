@@ -21,4 +21,7 @@ public interface DeckService {
     void delete(Long id);
 
     List<Flashcard> listCards(Long deckId);
+
+    /** 返回卡组及其所有子卡组（子树）内的卡片，用于掌握度散点图 */
+    List<Flashcard> listCardsDeep(Long deckId);
 }
