@@ -197,6 +197,12 @@ class APIService {
                                         cardType: cardType, options: options))
     }
 
+    /// 更新卡片复习笔记（空字符串 = 清除笔记），不影响原始内容
+    func updateCardNote(id: Int, note: String) async throws -> Flashcard {
+        try await send(method: "PUT", path: "/cards/\(id)/note",
+                       body: NoteRequest(note: note))
+    }
+
     func deleteCard(id: Int) async throws {
         var req = URLRequest(url: url("/cards/\(id)"))
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
@@ -233,9 +239,24 @@ class APIService {
         try await get("/decks/\(deckId)/cards")
     }
 
+    /// 获取卡组及其所有子卡组内的卡片（用于掌握度散点图）
+    func fetchCardsDeep(deckId: Int) async throws -> [Flashcard] {
+        try await get("/decks/\(deckId)/cards?deep=true")
+    }
+
+    // MARK: - AI 学习教练（Agent）
+    /// 问学习教练：Agent 会自主选择诊断工具并返回最终建议（同步等待，可能较慢）
+    func askCoach(_ message: String) async throws -> AgentRun {
+        try await send(method: "POST", path: "/agent/coach", body: CoachRequest(message: message))
+    }
+
     // MARK: - 今日计划
     func fetchTodayPlan() async throws -> TodayPlan {
         try await get("/plan/today")
+    }
+
+    func fetchTodaySummary() async throws -> ReviewSummary {
+        try await get("/plan/summary")
     }
 
     func submitReview(_ req: ReviewRequest) async throws -> Flashcard {

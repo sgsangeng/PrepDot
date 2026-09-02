@@ -506,6 +506,8 @@ struct TypeBadge: View {
 struct CardFormSheet: View {
     let deckId: Int
     var editing: Flashcard? = nil
+    /// 保存成功后回调更新后的卡片（用于复习页等场景原地刷新）
+    var onCardUpdated: ((Flashcard) -> Void)? = nil
 
     @Environment(\.dismiss) var dismiss
 
@@ -637,11 +639,12 @@ struct CardFormSheet: View {
             do {
                 let (finalAnswer, optionsJson) = buildPayload()
                 if let card = editing {
-                    try await APIService.shared.updateCard(
+                    let updated = try await APIService.shared.updateCard(
                         id: card.id, question: question, answer: finalAnswer,
                         cardType: mode.rawValue, options: optionsJson)
+                    onCardUpdated?(updated)
                 } else {
-                    try await APIService.shared.createCard(
+                    _ = try await APIService.shared.createCard(
                         deckId: deckId, question: question, answer: finalAnswer,
                         cardType: mode.rawValue, options: optionsJson)
                 }

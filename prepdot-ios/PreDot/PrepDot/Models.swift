@@ -35,6 +35,14 @@ struct Flashcard: Decodable, Identifiable, Hashable {
     let reviewCount: Int
     let nextReviewAt: String?
 
+    /// FSRS 难度 1-10，尚未复习为 nil
+    let difficulty: Double?
+    /// FSRS 稳定性（天），尚未复习为 nil
+    let stability: Double?
+
+    /// 复习笔记（用户自加，不影响原始内容），无笔记为 nil/空
+    let note: String?
+
     /// 解析 options JSON → [String]
     var parsedOptions: [String] {
         guard let raw = options,
@@ -52,7 +60,7 @@ struct TodayPlan: Decodable {
     let totalCount: Int
     let completedCount: Int
     let estimatedMinutes: Int
-    let cards: [Flashcard]
+    var cards: [Flashcard]
 }
 
 // MARK: - 新建卡组请求
@@ -67,6 +75,19 @@ struct CreateDeckRequest: Encodable {
 struct ReviewRequest: Encodable {
     let cardId: Int
     let rating: String  // again / hard / good / easy
+}
+
+// MARK: - 今日复习小结
+struct ReviewSummary: Decodable {
+    let totalCount: Int
+    let decks: [ReviewSummaryDeck]
+}
+
+struct ReviewSummaryDeck: Decodable, Identifiable {
+    var id: Int { deckId }
+    let deckId: Int
+    let deckTitle: String
+    let count: Int
 }
 
 // MARK: - 用户认证
@@ -121,6 +142,36 @@ struct GraphEdge: Decodable {
     let source: String
     let target: String
     let label: String
+}
+
+// MARK: - AI 学习教练（Agent）
+
+struct CoachRequest: Encodable {
+    let message: String
+}
+
+struct NoteRequest: Encodable {
+    let note: String
+}
+
+/// Agent 一次运行的完整记录（含可回放的每一步轨迹）
+struct AgentRun: Decodable {
+    let runId: Int
+    let status: String          // RUNNING / SUCCEEDED / FAILED
+    let output: String?         // 教练最终回答
+    let stepCount: Int
+    let steps: [AgentStep]
+}
+
+struct AgentStep: Decodable, Identifiable {
+    var id: Int { stepNo }
+    let stepNo: Int
+    let stepType: String        // MODEL / TOOL
+    let modelContent: String?
+    let toolName: String?
+    let toolArguments: String?
+    let toolResult: String?
+    let durationMs: Int?
 }
 
 // MARK: - AI 生成预览（本地解析 AI 返回的 JSON）

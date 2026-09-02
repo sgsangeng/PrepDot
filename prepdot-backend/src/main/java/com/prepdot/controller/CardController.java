@@ -3,6 +3,7 @@ package com.prepdot.controller;
 import com.prepdot.common.Result;
 import com.prepdot.common.UserContext;
 import com.prepdot.dto.request.CardRequest;
+import com.prepdot.dto.request.NoteRequest;
 import com.prepdot.entity.Flashcard;
 import com.prepdot.service.CardService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,6 +40,14 @@ public class CardController {
     public Result<Void> delete(@PathVariable Long id) {
         cardService.delete(id, UserContext.getUserId());
         return Result.success();
+    }
+
+    @Operation(summary = "更新卡片复习笔记（不影响原始内容）")
+    @PutMapping("/{id}/note")
+    public Result<Flashcard> updateNote(@PathVariable Long id,
+                                        @RequestBody NoteRequest request) {
+        String note = request.getNote() == null ? "" : request.getNote();
+        return Result.success(cardService.updateNote(id, note, UserContext.getUserId()));
     }
 
     @Operation(summary = "批量删除卡片")

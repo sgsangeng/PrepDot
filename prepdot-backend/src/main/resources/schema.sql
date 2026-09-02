@@ -1,12 +1,7 @@
 -- PrepDot 数据库初始化脚本
--- 执行前确保 MySQL 已运行，然后在终端执行：
--- mysql -u root -p < schema.sql
-
-CREATE DATABASE IF NOT EXISTS prepdot
-  DEFAULT CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
-USE prepdot;
+-- 应用启动时由 Spring 自动执行（spring.sql.init.mode=always），
+-- 会对当前配置的数据源执行建表 + 写入默认设置，语句均幂等。
+-- 如需手动执行：mysql -u root -p <database_name> < schema.sql
 
 -- ===================== 用户表 =====================
 CREATE TABLE IF NOT EXISTS user (
@@ -46,6 +41,7 @@ CREATE TABLE IF NOT EXISTS flashcard (
     memory_score     INT          NOT NULL DEFAULT 35                COMMENT '记忆度 0-100（实时计算展示用）',
     difficulty       DOUBLE                                          COMMENT 'FSRS 难度 1-10，未复习为 NULL',
     stability        DOUBLE                                          COMMENT 'FSRS 稳定性(天)，未复习为 NULL',
+    note             TEXT                                            COMMENT '复习笔记（用户自加，不影响原始内容）',
     review_count     INT          NOT NULL DEFAULT 0                 COMMENT '复习次数',
     last_reviewed_at DATETIME                                        COMMENT '上次复习时间',
     next_review_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '下次复习时间',

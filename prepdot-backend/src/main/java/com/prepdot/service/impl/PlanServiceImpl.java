@@ -5,6 +5,7 @@ import com.prepdot.common.BusinessException;
 import com.prepdot.algorithm.FsrsScheduler;
 import com.prepdot.algorithm.FsrsState;
 import com.prepdot.dto.request.ReviewRequest;
+import com.prepdot.dto.response.ReviewSummaryVO;
 import com.prepdot.dto.response.TodayPlanVO;
 import com.prepdot.entity.*;
 import com.prepdot.mapper.*;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -49,6 +51,9 @@ public class PlanServiceImpl implements PlanService {
 
         if (plan == null) {
             plan = generatePlan(today, userId);
+        } else {
+            // 计划已存在时，把当天新导入/新建的到期卡片补进来，避免计划被首次生成的结果固化
+            replenishPlan(plan, userId);
         }
 
         List<DailyPlanItem> items = planItemMapper.selectList(
@@ -150,6 +155,24 @@ public class PlanServiceImpl implements PlanService {
         return card;
     }
 
+    @Override
+    public ReviewSummaryVO getTodaySummary(Long userId) {
+        List<Map<String, Object>> rows = reviewRecordMapper.todayReviewByDeck(userId);
+
+        List<ReviewSummaryVO.DeckCount> decks = rows.stream().map(m -> {
+            ReviewSummaryVO.DeckCount d = new ReviewSummaryVO.DeckCount();
+            d.setDeckId(((Number) m.get("deckId")).longValue());
+            d.setDeckTitle((String) m.get("deckTitle"));
+            d.setCount(((Number) m.get("reviewCount")).intValue());
+            return d;
+        }).collect(Collectors.toList());
+
+        ReviewSummaryVO vo = new ReviewSummaryVO();
+        vo.setTotalCount(decks.stream().mapToInt(ReviewSummaryVO.DeckCount::getCount).sum());
+        vo.setDecks(decks);
+        return vo;
+    }
+
     private DailyPlan generatePlan(LocalDate date, Long userId) {
         List<Flashcard> dueCards = flashcardMapper.selectDueCards(DAILY_TARGET, userId);
 
@@ -170,5 +193,39 @@ public class PlanServiceImpl implements PlanService {
         }
 
         return plan;
+    }
+
+    /**
+     * 给已存在的当日计划补入新到期的卡片：只加入那些尚未出现在计划里的卡片，
+     * 已 done / 已 pending 的项保持不变，避免重复。
+     */
+    private void replenishPlan(DailyPlan plan, Long userId) {
+        Set<Long> existingCardIds = planItemMapper.selectList(
+                        new LambdaQueryWrapper<DailyPlanItem>()
+                                .eq(DailyPlanItem::getPlanId, plan.getId()))
+                .stream()
+                .map(DailyPlanItem::getCardId)
+                .collect(Collectors.toSet());
+
+        List<Flashcard> dueCards = flashcardMapper.selectAllDueCards(userId);
+
+        int added = 0;
+        for (Flashcard card : dueCards) {
+            if (existingCardIds.contains(card.getId())) {
+                continue;
+            }
+            DailyPlanItem item = new DailyPlanItem();
+            item.setPlanId(plan.getId());
+            item.setCardId(card.getId());
+            item.setStatus("pending");
+            planItemMapper.insert(item);
+            added++;
+        }
+
+        if (added > 0) {
+            plan.setTotalCount(plan.getTotalCount() + added);
+            plan.setEstimatedMinutes(plan.getTotalCount() * 2);
+            planMapper.updateById(plan);
+        }
     }
 }

@@ -3,6 +3,7 @@ package com.prepdot.controller;
 import com.prepdot.common.Result;
 import com.prepdot.common.UserContext;
 import com.prepdot.dto.request.ReviewRequest;
+import com.prepdot.dto.response.ReviewSummaryVO;
 import com.prepdot.dto.response.TodayPlanVO;
 import com.prepdot.entity.Flashcard;
 import com.prepdot.service.PlanService;
@@ -30,5 +31,11 @@ public class PlanController {
     @PostMapping("/review")
     public Result<Flashcard> review(@Valid @RequestBody ReviewRequest request) {
         return Result.success(planService.submitReview(request, UserContext.getUserId()));
+    }
+
+    @Operation(summary = "获取今日复习小结（按卡组统计复习卡片数）")
+    @GetMapping("/summary")
+    public Result<ReviewSummaryVO> summary() {
+        return Result.success(planService.getTodaySummary(UserContext.getUserId()));
     }
 }

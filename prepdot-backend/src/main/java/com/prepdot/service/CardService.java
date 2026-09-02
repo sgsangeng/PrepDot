@@ -18,4 +18,7 @@ public interface CardService {
 
     /** 批量删除：只会删除属于 userId 的那部分，其余静默忽略 */
     void deleteBatch(List<Long> ids, Long userId);
+
+    /** 更新复习笔记（不动 question/answer/category 等原始内容），会校验归属 */
+    Flashcard updateNote(Long id, String note, Long userId);
 }

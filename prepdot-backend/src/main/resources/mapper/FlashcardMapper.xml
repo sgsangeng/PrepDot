@@ -15,4 +15,14 @@
         LIMIT #{limit}
     </select>
 
+    <!-- 查询当前用户全部到期卡片，不设上限，用于补入当日计划 -->
+    <select id="selectAllDueCards" resultType="com.prepdot.entity.Flashcard">
+        SELECT f.*
+        FROM flashcard f
+        JOIN deck d ON f.deck_id = d.id
+        WHERE f.next_review_at &lt;= NOW()
+          AND (#{userId} IS NULL OR d.user_id = #{userId})
+        ORDER BY f.memory_score ASC, f.next_review_at ASC
+    </select>
+
 </mapper>

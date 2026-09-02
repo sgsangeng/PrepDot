@@ -35,6 +35,9 @@ public class Flashcard {
     /** FSRS 稳定性（天），尚未复习时为空 */
     private Double stability;
 
+    /** 复习笔记：用户复习时自加，独立于原始 question/answer，可清空 */
+    private String note;
+
     /** 复习次数 */
     private Integer reviewCount;
 

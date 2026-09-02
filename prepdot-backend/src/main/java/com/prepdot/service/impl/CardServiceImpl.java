@@ -66,6 +66,22 @@ public class CardServiceImpl implements CardService {
     }
 
     @Override
+    public Flashcard updateNote(Long id, String note, Long userId) {
+        Flashcard card = flashcardMapper.selectById(id);
+        if (card == null) throw BusinessException.notFound("卡片不存在: " + id);
+        checkDeckOwner(card.getDeckId(), userId);
+
+        // 只更新 note 一列，question/answer/options 等原始内容完全不受影响
+        Flashcard patch = new Flashcard();
+        patch.setId(id);
+        patch.setNote(note);
+        flashcardMapper.updateById(patch);
+
+        card.setNote(note);
+        return card;
+    }
+
+    @Override
     public void deleteBatch(List<Long> ids, Long userId) {
         if (ids == null || ids.isEmpty()) return;
 
