@@ -34,7 +34,9 @@ class APIService {
         let parts = token.split(separator: ".")
         guard parts.count >= 2 else { return nil }
         var base64 = String(parts[1])
-        // 补齐 base64 padding
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        // JWT 使用 Base64URL；转换后补齐标准 Base64 padding
         while base64.count % 4 != 0 { base64 += "=" }
         guard let data = Data(base64Encoded: base64),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -43,14 +45,13 @@ class APIService {
         return Date(timeIntervalSince1970: exp)
     }
 
-    /// 检查 token 是否即将过期（剩余时间不足总时长的一半）
+    /// 检查 token 是否即将过期（7 天有效期剩余不足一半）
     private func isTokenExpiringSoon() -> Bool {
         guard let t = token,
               let expiry = tokenExpiryDate(t)
         else { return true }
-        let remaining = expiry.timeIntervalSinceNow
-        let total = expiry.timeIntervalSinceNow + (7 * 24 * 3600) // 粗算：假设 7 天有效期
-        return remaining < total * 0.5
+        let refreshThreshold: TimeInterval = 3.5 * 24 * 3600
+        return expiry.timeIntervalSinceNow < refreshThreshold
     }
 
     /// 调用后端刷新接口获取新 token

@@ -195,10 +195,16 @@ public class DeckServiceImpl implements DeckService {
     }
 
     @Override
-    public List<Flashcard> listCardsDeep(Long deckId) {
-        // 一次查全量卡组，内存里建 parentId → children 映射，再 BFS 收集子树，
+    public List<Flashcard> listCardsDeep(Long deckId, Long userId) {
+        // 一次查询当前用户可访问的卡组，内存里建 parentId → children 映射，再 BFS 收集子树，
         // 避免逐层查库的 N+1。卡组层级最多 3 层，内存遍历代价可忽略。
-        List<Deck> allDecks = deckMapper.selectList(null);
+        LambdaQueryWrapper<Deck> deckQuery = new LambdaQueryWrapper<>();
+        if (userId != null) {
+            deckQuery.and(q -> q.eq(Deck::getUserId, userId).or().isNull(Deck::getUserId));
+        } else {
+            deckQuery.isNull(Deck::getUserId);
+        }
+        List<Deck> allDecks = deckMapper.selectList(deckQuery);
         Map<Long, List<Long>> childrenMap = new HashMap<>();
         for (Deck d : allDecks) {
             if (d.getParentId() != null) {

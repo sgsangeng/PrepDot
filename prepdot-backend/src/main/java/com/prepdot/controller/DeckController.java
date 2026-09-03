@@ -67,6 +67,8 @@ public class DeckController {
     public Result<List<Flashcard>> listCards(@PathVariable Long id,
                                              @RequestParam(required = false, defaultValue = "false") boolean deep) {
         checkOwner(id, UserContext.getUserId());
-        return Result.success(deep ? deckService.listCardsDeep(id) : deckService.listCards(id));
+        return Result.success(deep
+                ? deckService.listCardsDeep(id, UserContext.getUserId())
+                : deckService.listCards(id));
     }
 }
