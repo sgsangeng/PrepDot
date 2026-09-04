@@ -14,6 +14,7 @@ struct ProfileView: View {
     @Environment(AuthManager.self) var auth
     @State private var stats: UserStats? = nil
     @State private var loading = true
+    @State private var showDeleteAccount = false
 
     var body: some View {
         ScrollView {
@@ -43,6 +44,9 @@ struct ProfileView: View {
         .navigationBarTitleDisplayMode(.large)
         .refreshable { await loadStats() }
         .task { await loadStats() }
+        .sheet(isPresented: $showDeleteAccount) {
+            DeleteAccountView()
+        }
     }
 
     // MARK: - 未登录提示
@@ -225,6 +229,10 @@ struct ProfileView: View {
             Button(action: { auth.logout() }) {
                 CleanSettingsRow(icon: "rectangle.portrait.and.arrow.right", color: Color(red: 0.85, green: 0.3, blue: 0.75), label: "退出登录", isDestructive: true)
             }
+            Divider().padding(.leading, 56)
+            Button(action: { showDeleteAccount = true }) {
+                CleanSettingsRow(icon: "trash.fill", color: .red, label: "注销账号", isDestructive: true)
+            }
         }
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
         .padding(.horizontal)
@@ -252,6 +260,67 @@ struct ProfileView: View {
         return (0..<7).reversed().map { offset in
             let date = Calendar.current.date(byAdding: .day, value: -offset, to: Date())!
             return DayItem(label: short.string(from: date), count: lookup[fmt.string(from: date)] ?? 0)
+        }
+    }
+}
+
+private struct DeleteAccountView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AuthManager.self) private var auth
+    @State private var password = ""
+    @State private var deleting = false
+    @State private var errorMessage = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("注销后，账号、卡组、卡片、复习记录和 AI 学习记录都会永久删除，无法恢复。")
+                        .foregroundStyle(.red)
+                }
+                Section("确认身份") {
+                    SecureField("请输入当前密码", text: $password)
+                }
+                if !errorMessage.isEmpty {
+                    Section { Text(errorMessage).foregroundStyle(.red) }
+                }
+                Section {
+                    Button(role: .destructive, action: deleteAccount) {
+                        HStack {
+                            Spacer()
+                            if deleting { ProgressView() } else { Text("永久注销账号") }
+                            Spacer()
+                        }
+                    }
+                    .disabled(password.isEmpty || deleting)
+                }
+            }
+            .navigationTitle("注销账号")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func deleteAccount() {
+        deleting = true
+        errorMessage = ""
+        Task {
+            do {
+                try await APIService.shared.deleteAccount(password: password)
+                await MainActor.run {
+                    auth.logout()
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    deleting = false
+                }
+            }
         }
     }
 }

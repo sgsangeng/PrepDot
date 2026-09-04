@@ -52,4 +52,29 @@ class AgentOrchestratorTest {
         verify(runMapper).updateById(org.mockito.ArgumentMatchers.<AgentRun>argThat(
                 run -> "SUCCEEDED".equals(run.getStatus()) && run.getStepCount() == 3));
     }
+
+    @Test
+    void run_withToolsDisabled_callsModelOnceWithoutTools() throws Exception {
+        AgentModelClient client = mock(AgentModelClient.class);
+        AgentRunMapper runMapper = mock(AgentRunMapper.class);
+        AgentStepMapper stepMapper = mock(AgentStepMapper.class);
+        doAnswer(invocation -> { ((AgentRun) invocation.getArgument(0)).setId(43L); return 1; })
+                .when(runMapper).insert(any(AgentRun.class));
+        when(stepMapper.selectList(any())).thenReturn(List.of());
+        when(client.chat(anyList(), anyList(), any()))
+                .thenReturn(new AgentModelResponse("布隆过滤器是一种概率型数据结构。", List.of(), "raw"));
+
+        AgentTool unusedTool = mock(AgentTool.class);
+        when(unusedTool.name()).thenReturn("unused");
+        AgentOrchestrator orchestrator = new AgentOrchestrator(
+                client, new ToolRegistry(List.of(unusedTool)), runMapper, stepMapper, mapper);
+        ReflectionTestUtils.setField(orchestrator, "maxIterations", 4);
+
+        var result = orchestrator.run("CARD_QA", "system", "什么是布隆过滤器", 7L, "key", false);
+
+        assertEquals("SUCCEEDED", result.getStatus());
+        assertEquals(1, result.getStepCount());
+        verify(client, times(1)).chat(anyList(), argThat(List::isEmpty), eq("key"));
+        verify(unusedTool, never()).execute(any(), any());
+    }
 }

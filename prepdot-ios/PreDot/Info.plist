@@ -48,5 +48,7 @@
         <key>NSAllowsArbitraryLoads</key>
         <true/>
     </dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>开发调试时需要连接同一局域网内的 PrepDot 后端服务。</string>
 </dict>
 </plist>

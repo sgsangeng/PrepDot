@@ -148,6 +148,7 @@ struct GraphEdge: Decodable {
 
 struct CoachRequest: Encodable {
     let message: String
+    let mode: String
 }
 
 struct NoteRequest: Encodable {

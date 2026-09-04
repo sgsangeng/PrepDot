@@ -8,6 +8,7 @@ struct ReviewView: View {
     @State private var sessionStarted = false
     @State private var currentIndex = 0
     @State private var sessionDone = false
+    @State private var loadError = ""
 
     var pendingCards: [Flashcard] { plan?.cards ?? [] }
 
@@ -16,6 +17,17 @@ struct ReviewView: View {
             Group {
                 if loading {
                     loadingView
+                } else if !loadError.isEmpty {
+                    ContentUnavailableView {
+                        Label("今日复习加载失败", systemImage: "wifi.exclamationmark")
+                    } description: {
+                        Text(loadError)
+                    } actions: {
+                        Button("重新加载") {
+                            Task { await loadPlan() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 } else if sessionDone || pendingCards.isEmpty {
                     DoneView(onGoToDecks: {
                         selectedTab = 1  // 切换到我的卡组
@@ -50,7 +62,12 @@ struct ReviewView: View {
 
     private func loadPlan() async {
         loading = true
-        do { plan = try await APIService.shared.fetchTodayPlan() } catch {}
+        loadError = ""
+        do {
+            plan = try await APIService.shared.fetchTodayPlan()
+        } catch {
+            loadError = error.localizedDescription
+        }
         loading = false
     }
 
@@ -736,7 +753,7 @@ struct CoachChatSheet: View {
     private var introView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("复习中有疑问？教练会根据你的真实学习数据（薄弱卡片、复习趋势等）回答，也能针对当前这张卡展开讲解。")
+                Text("对当前题目有疑问？直接提问，教练会给出简短、针对性的解释。")
                     .font(.footnote).foregroundColor(.secondary)
                     .lineSpacing(4)
                 Text("试试这样问：")
@@ -814,7 +831,7 @@ struct CoachChatSheet: View {
     private var thinkingRow: some View {
         HStack {
             ProgressView().tint(.indigo)
-            Text("教练正在分析你的复习数据…").font(.footnote).foregroundColor(.secondary)
+            Text("教练正在回答…").font(.footnote).foregroundColor(.secondary)
             Spacer()
         }
         .padding(.horizontal, 4)

@@ -7,8 +7,16 @@ class APIService {
     #if targetEnvironment(simulator)
     private let base = "http://localhost:8080/api"
     #else
-    private let base = "http://10.44.2.238:8080/api"   // Mac 局域网 IP，真机用
+    private let base = "http://10.44.4.250:8080/api"   // Mac 当前局域网 IP，真机开发用
     #endif
+
+    /// 本地后端不可达时尽快失败，避免界面长期停留在加载状态。
+    private let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 180
+        return URLSession(configuration: configuration)
+    }()
 
     /// 登录后的 JWT token（由 AuthManager 注入）
     var token: String? = UserDefaults.standard.string(forKey: "jwt_token")
@@ -63,7 +71,7 @@ class APIService {
         var req = URLRequest(url: url("/auth/refresh"))
         req.httpMethod = "POST"
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await session.data(for: req)
         // 刷新接口本身也可能返回 401（token 已经过期太久）
         if let http = response as? HTTPURLResponse, http.statusCode == 401 {
             AuthManager.shared.logout()
@@ -96,7 +104,7 @@ class APIService {
     private func get<T: Decodable>(_ path: String) async throws -> T {
         var req = URLRequest(url: url(path))
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await session.data(for: req)
 
         // 处理 401：token 过期或无效 → 强制登出
         if let http = response as? HTTPURLResponse, http.statusCode == 401 {
@@ -132,6 +140,25 @@ class APIService {
         try await get("/auth/stats")
     }
 
+    /// 永久删除当前账号及其关联学习数据。
+    func deleteAccount(password: String) async throws {
+        struct Body: Encodable { let password: String }
+        struct Response: Decodable { let code: Int; let message: String }
+
+        var req = URLRequest(url: url("/auth/account"))
+        req.httpMethod = "DELETE"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        req.httpBody = try JSONEncoder().encode(Body(password: password))
+
+        let (data, urlResponse) = try await session.data(for: req)
+        let result = try decoder.decode(Response.self, from: data)
+        guard let http = urlResponse as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode), result.code == 200 else {
+            throw APIServiceError.server(result.message)
+        }
+    }
+
     // MARK: - 通用 POST/PUT
     private func send<Body: Encodable, T: Decodable>(
         method: String, path: String, body: Body
@@ -141,7 +168,7 @@ class APIService {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         req.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await session.data(for: req)
 
         // 处理 401：token 过期或无效 → 强制登出
         if let http = response as? HTTPURLResponse, http.statusCode == 401 {
@@ -208,7 +235,7 @@ class APIService {
         var req = URLRequest(url: url("/cards/\(id)"))
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         req.httpMethod = "DELETE"
-        _ = try await URLSession.shared.data(for: req)
+        _ = try await session.data(for: req)
     }
 
     func deleteCards(ids: [Int]) async throws {
@@ -216,7 +243,7 @@ class APIService {
         var req = URLRequest(url: URL(string: base + "/cards/batch?\(query)")!)
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         req.httpMethod = "DELETE"
-        _ = try await URLSession.shared.data(for: req)
+        _ = try await session.data(for: req)
     }
 
     func createDeck(_ req: CreateDeckRequest) async throws -> Deck {
@@ -233,7 +260,7 @@ class APIService {
         var req = URLRequest(url: url("/decks/\(id)"))
         req.httpMethod = "DELETE"
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
-        _ = try await URLSession.shared.data(for: req)
+        _ = try await session.data(for: req)
     }
 
     func fetchCards(deckId: Int) async throws -> [Flashcard] {
@@ -246,9 +273,10 @@ class APIService {
     }
 
     // MARK: - AI 学习教练（Agent）
-    /// 问学习教练：Agent 会自主选择诊断工具并返回最终建议（同步等待，可能较慢）
+    /// 当前卡片快速答疑：不运行学习数据诊断工具，只请求模型一次。
     func askCoach(_ message: String) async throws -> AgentRun {
-        try await send(method: "POST", path: "/agent/coach", body: CoachRequest(message: message))
+        try await send(method: "POST", path: "/agent/coach",
+                       body: CoachRequest(message: message, mode: "CARD_QA"))
     }
 
     // MARK: - 今日计划
@@ -303,7 +331,7 @@ class APIService {
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
         req.httpBody = body
 
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, _) = try await session.data(for: req)
         let result = try decoder.decode(APIResult<String>.self, from: data)
         guard let value = result.data else {
             throw URLError(.badServerResponse)
@@ -318,7 +346,7 @@ class APIService {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         req.httpBody = json.data(using: .utf8)
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, _) = try await session.data(for: req)
         let result = try decoder.decode(APIResult<Deck>.self, from: data)
         guard let value = result.data else {
             throw URLError(.badServerResponse)
@@ -351,5 +379,15 @@ class APIService {
     func importCommunityPack(id: Int) async throws -> Deck {
         struct Empty: Encodable {}
         return try await send(method: "POST", path: "/community/packs/\(id)/import", body: Empty())
+    }
+}
+
+enum APIServiceError: LocalizedError {
+    case server(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .server(let message): return message
+        }
     }
 }

@@ -5,12 +5,15 @@ import com.prepdot.common.Result;
 import com.prepdot.common.UserContext;
 import com.prepdot.dto.response.AuthVO;
 import com.prepdot.dto.response.UserStatsVO;
+import com.prepdot.dto.request.DeleteAccountRequest;
 import com.prepdot.entity.User;
 import com.prepdot.mapper.DeckMapper;
 import com.prepdot.mapper.FlashcardMapper;
 import com.prepdot.mapper.UserMapper;
 import com.prepdot.util.JwtUtil;
 import com.prepdot.service.FsrsMemoryService;
+import com.prepdot.service.AccountService;
+import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.Data;
@@ -34,6 +37,7 @@ public class AuthController {
     private final FlashcardMapper flashcardMapper;
     private final JwtUtil         jwtUtil;
     private final FsrsMemoryService fsrsMemoryService;
+    private final AccountService accountService;
 
     private static final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
@@ -145,6 +149,13 @@ public class AuthController {
         if (user == null) return Result.error("用户不存在");
         log.info("用户 {} 续期成功", user.getUsername());
         return Result.success(buildAuthVO(user));
+    }
+
+    @Operation(summary = "永久注销当前账号及其关联数据")
+    @DeleteMapping("/account")
+    public Result<Void> deleteAccount(@Valid @RequestBody DeleteAccountRequest request) {
+        accountService.deleteAccount(UserContext.getUserId(), request.getPassword());
+        return Result.success();
     }
 
     // ── 更新个人信息 ──────────────────────────────

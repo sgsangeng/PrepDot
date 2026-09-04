@@ -16,6 +16,7 @@ struct DecksView: View {
     @State private var editingDeck: Deck?
     @State private var searchText = ""
     @State private var showGraph = false
+    @State private var loadError = ""
 
     // 只显示根卡组（parentId == nil），子卡组在详情页里展开
     private var rootDecks: [Deck] { decks.filter { $0.parentId == nil } }
@@ -40,6 +41,15 @@ struct DecksView: View {
                 if loading {
                     ProgressView("加载中…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if !loadError.isEmpty {
+                    ContentUnavailableView {
+                        Label("卡组加载失败", systemImage: "wifi.exclamationmark")
+                    } description: {
+                        Text(loadError)
+                    } actions: {
+                        Button("重新加载", action: loadDecks)
+                            .buttonStyle(.borderedProminent)
+                    }
                 } else if decks.isEmpty {
                     ContentUnavailableView(
                         "还没有卡组",
@@ -128,8 +138,13 @@ struct DecksView: View {
 
     private func loadDecks() {
         loading = true
+        loadError = ""
         Task {
-            do { decks = try await APIService.shared.fetchDecks() } catch {}
+            do {
+                decks = try await APIService.shared.fetchDecks()
+            } catch {
+                loadError = error.localizedDescription
+            }
             loading = false
         }
     }
@@ -717,4 +732,3 @@ struct CreateDeckSheet: View {
         }
     }
 }
-

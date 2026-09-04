@@ -15,6 +15,7 @@ MYSQL_MARKER="${RUN_DIR}/mysql.started-by-prepdot"
 BACKEND_LOG="${LOG_DIR}/backend.log"
 XCODE_LOG="${LOG_DIR}/xcodebuild.log"
 BACKEND_PORT="${BACKEND_PORT:-8080}"
+SIMULATOR_NAME_OVERRIDE="${SIMULATOR_NAME:-}"
 SIMULATOR_NAME="${SIMULATOR_NAME:-iPhone 17 Pro Max}"
 BUNDLE_ID="com.prepdot.app"
 
@@ -26,6 +27,14 @@ warn() { printf '\033[1;33m[提示]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[错误]\033[0m %s\n' "$*" >&2; exit 1; }
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
+
+ensure_java17() {
+  local java17_home
+  java17_home="$(/usr/libexec/java_home -v 17 2>/dev/null)" || \
+    fail "找不到 Java 17，请先安装 JDK 17。"
+  export JAVA_HOME="${java17_home}"
+  export PATH="${JAVA_HOME}/bin:${PATH}"
+}
 
 pid_is_running() {
   local pid_file="$1" pid
@@ -80,6 +89,7 @@ start_backend() {
   fi
   rm -f "${BACKEND_PID_FILE}"
   ensure_port_free "${BACKEND_PORT}" "后端"
+  ensure_java17
   command_exists mvn || fail "找不到 Maven (mvn)，请先安装并加入 PATH。"
   [[ -f "${BACKEND_DIR}/src/main/resources/application.yml" ]] || \
     fail "缺少 application.yml，请复制 application.yml.example 并填写数据库配置。"
@@ -116,6 +126,14 @@ find_simulator() {
     printf '%s\n' "${SIMULATOR_UDID}"
     return
   fi
+  if [[ -n "${SIMULATOR_NAME_OVERRIDE}" ]]; then
+    udid="$(xcrun simctl list devices available | \
+      awk -v name="${SIMULATOR_NAME}" 'index($0, name " (") { if (match($0, /[0-9A-Fa-f-]{36}/)) { print substr($0, RSTART, RLENGTH); exit } }')"
+    if [[ -n "${udid}" ]]; then
+      printf '%s\n' "${udid}"
+      return
+    fi
+  fi
   udid="$(xcrun simctl list devices available | \
     awk '/-- iOS / { ios=1; next } /^-- / { ios=0 } ios && /\(Booted\)/ && /iPhone/ { if (match($0, /[0-9A-Fa-f-]{36}/)) { print substr($0, RSTART, RLENGTH); exit } }')"
   if [[ -z "${udid}" ]]; then
@@ -129,6 +147,39 @@ find_simulator() {
   printf '%s\n' "${udid}"
 }
 
+simulator_state() {
+  local udid="$1"
+  xcrun simctl list devices 2>/dev/null | \
+    awk -v id="${udid}" 'index($0, id) {
+      if ($0 ~ /\(Booted\)[[:space:]]*$/) print "Booted"
+      else if ($0 ~ /\(Shutdown\)[[:space:]]*$/) print "Shutdown"
+      else if ($0 ~ /\(Shutting Down\)[[:space:]]*$/) print "Shutting Down"
+      else if ($0 ~ /\(Creating\)[[:space:]]*$/) print "Creating"
+      exit
+    }'
+}
+
+boot_simulator() {
+  local udid="$1" attempt state
+  for attempt in 1 2 3; do
+    # 指定当前设备，避免 Simulator.app 打开了另一个已关机设备。
+    open -a Simulator --args -CurrentDeviceUDID "${udid}"
+    xcrun simctl boot "${udid}" 2>/dev/null || true
+    if xcrun simctl bootstatus "${udid}" -b; then
+      state="$(simulator_state "${udid}")"
+      if [[ "${state}" == "Booted" ]]; then
+        return 0
+      fi
+      warn "模拟器启动后状态为 ${state:-未知}，正在重试 (${attempt}/3)..."
+    else
+      warn "等待模拟器启动失败，正在重试 (${attempt}/3)..."
+    fi
+    xcrun simctl shutdown "${udid}" 2>/dev/null || true
+    sleep 2
+  done
+  return 1
+}
+
 start_ios() {
   command_exists xcrun || fail "找不到 xcrun，请先安装 Xcode。"
   command_exists xcodebuild || fail "找不到 xcodebuild，请先安装 Xcode。"
@@ -140,9 +191,8 @@ start_ios() {
   printf '%s\n' "${udid}" >"${SIMULATOR_FILE}"
 
   info "启动 iOS 模拟器 (${udid})..."
-  open -a Simulator
-  xcrun simctl boot "${udid}" 2>/dev/null || true
-  xcrun simctl bootstatus "${udid}" -b || fail "iOS 模拟器启动失败。"
+  boot_simulator "${udid}" || \
+    fail "iOS 模拟器连续 3 次启动失败。请退出 Xcode 和 Simulator 后重新打开；若仍失败，请重启 Mac。"
 
   info "构建 PrepDot iOS App..."
   xcodebuild -project "${IOS_PROJECT}" -scheme PrepDot -configuration Debug \

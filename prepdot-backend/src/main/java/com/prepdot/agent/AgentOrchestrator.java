@@ -29,6 +29,11 @@ public class AgentOrchestrator {
     @Value("${ai.agent.max-iterations:8}") private int maxIterations;
 
     public AgentRunVO run(String taskType, String systemPrompt, String userInput, Long userId, String apiKey) {
+        return run(taskType, systemPrompt, userInput, userId, apiKey, true);
+    }
+
+    public AgentRunVO run(String taskType, String systemPrompt, String userInput,
+                          Long userId, String apiKey, boolean toolsEnabled) {
         AgentRun run = new AgentRun();
         run.setUserId(userId);
         run.setTaskType(taskType);
@@ -45,7 +50,10 @@ public class AgentOrchestrator {
         try {
             for (int iteration = 0; iteration < maxIterations; iteration++) {
                 long modelStarted = System.currentTimeMillis();
-                AgentModelResponse response = modelClient.chat(messages, new ArrayList<>(toolRegistry.all()), apiKey);
+                List<AgentTool> availableTools = toolsEnabled
+                        ? new ArrayList<>(toolRegistry.all())
+                        : List.of();
+                AgentModelResponse response = modelClient.chat(messages, availableTools, apiKey);
                 AgentStep modelStep = step(run.getId(), ++stepNo, "MODEL");
                 modelStep.setModelContent(response.content());
                 modelStep.setDurationMs(System.currentTimeMillis() - modelStarted);
