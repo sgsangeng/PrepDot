@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +35,12 @@ public class AgentOrchestrator {
 
     public AgentRunVO run(String taskType, String systemPrompt, String userInput,
                           Long userId, String apiKey, boolean toolsEnabled) {
+        return run(taskType, systemPrompt, userInput, userId, apiKey, toolsEnabled, ignored -> {});
+    }
+
+    public AgentRunVO run(String taskType, String systemPrompt, String userInput,
+                          Long userId, String apiKey, boolean toolsEnabled,
+                          Consumer<String> onProgress) {
         AgentRun run = new AgentRun();
         run.setUserId(userId);
         run.setTaskType(taskType);
@@ -49,6 +56,7 @@ public class AgentOrchestrator {
         int stepNo = 0;
         try {
             for (int iteration = 0; iteration < maxIterations; iteration++) {
+                onProgress.accept(iteration == 0 ? "正在理解你的问题" : "正在整理诊断结果");
                 long modelStarted = System.currentTimeMillis();
                 List<AgentTool> availableTools = toolsEnabled
                         ? new ArrayList<>(toolRegistry.all())
@@ -67,6 +75,7 @@ public class AgentOrchestrator {
 
                 for (AgentMessage.ToolCall call : response.toolCalls()) {
                     AgentTool tool = toolRegistry.require(call.name());
+                    onProgress.accept("正在执行工具：" + call.name());
                     long toolStarted = System.currentTimeMillis();
                     String result;
                     try {
@@ -80,6 +89,7 @@ public class AgentOrchestrator {
                     toolStep.setToolResult(abbreviate(result, 12000));
                     toolStep.setDurationMs(System.currentTimeMillis() - toolStarted);
                     stepMapper.insert(toolStep);
+                    onProgress.accept("工具完成：" + call.name());
                     messages.add(AgentMessage.tool(call.id(), result));
                 }
             }

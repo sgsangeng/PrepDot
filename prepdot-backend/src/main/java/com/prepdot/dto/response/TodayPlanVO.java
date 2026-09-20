@@ -17,4 +17,15 @@ public class TodayPlanVO {
 
     /** 今日待复习卡片列表 */
     private List<Flashcard> cards;
+
+    /** 今日计划按卡组拆分后的完成进度 */
+    private List<DeckProgress> deckProgress;
+
+    @Data
+    public static class DeckProgress {
+        private Long deckId;
+        private String deckTitle;
+        private Integer totalCount;
+        private Integer completedCount;
+    }
 }

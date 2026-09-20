@@ -3,11 +3,13 @@ import Foundation
 class APIService {
     static let shared = APIService()
 
-    // iOS 模拟器访问 Mac 本机 Spring Boot 用这个地址
-    #if targetEnvironment(simulator)
-    private let base = "http://localhost:8080/api"
+    // 默认连接云端，保证真机、模拟器和 Release 包都可直接演示。
+    // 本地调试可在 Xcode Scheme 中设置 PREPDOT_API_BASE_URL=http://localhost:8080/api。
+    #if DEBUG
+    private let base = ProcessInfo.processInfo.environment["PREPDOT_API_BASE_URL"]
+        ?? "https://api.adeer.site/prepdot/api"
     #else
-    private let base = "http://10.44.4.250:8080/api"   // Mac 当前局域网 IP，真机开发用
+    private let base = "https://api.adeer.site/prepdot/api"
     #endif
 
     /// 本地后端不可达时尽快失败，避免界面长期停留在加载状态。
@@ -114,7 +116,7 @@ class APIService {
 
         let result = try decoder.decode(APIResult<T>.self, from: data)
         guard let value = result.data else {
-            throw URLError(.badServerResponse)
+            throw APIServiceError.server(result.message)
         }
 
         // 请求成功后检查是否需要自动续期
@@ -256,6 +258,12 @@ class APIService {
                               body: Body(title: title, category: category, description: description))
     }
 
+    func moveDeck(id: Int, parentId: Int?) async throws -> Deck {
+        struct Body: Encodable { let parentId: Int? }
+        return try await send(method: "PUT", path: "/decks/\(id)/parent",
+                              body: Body(parentId: parentId))
+    }
+
     func deleteDeck(id: Int) async throws {
         var req = URLRequest(url: url("/decks/\(id)"))
         req.httpMethod = "DELETE"
@@ -277,6 +285,59 @@ class APIService {
     func askCoach(_ message: String) async throws -> AgentRun {
         try await send(method: "POST", path: "/agent/coach",
                        body: CoachRequest(message: message, mode: "CARD_QA"))
+    }
+
+    /// 完整学习教练：允许模型调用薄弱卡片、复习趋势、冷落卡组和补强卡片工具。
+    func askLearningCoach(_ message: String) async throws -> AgentRun {
+        try await send(method: "POST", path: "/agent/coach",
+                       body: CoachRequest(message: message, mode: "LEARNING_COACH"))
+    }
+
+    enum CoachStreamEvent {
+        case progress(String)
+        case result(AgentRun)
+    }
+
+    /// SSE：逐步返回 Agent 执行进度，最后返回完整、可校验的运行结果。
+    func streamLearningCoach(_ message: String) -> AsyncThrowingStream<CoachStreamEvent, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    var req = URLRequest(url: url("/agent/coach/stream"))
+                    req.httpMethod = "POST"
+                    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                    if let t = token { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+                    req.httpBody = try JSONEncoder().encode(CoachRequest(message: message, mode: "LEARNING_COACH"))
+                    let (bytes, response) = try await session.bytes(for: req)
+                    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                        throw URLError(.badServerResponse)
+                    }
+                    var event = "message"
+                    var data: [String] = []
+                    for try await line in bytes.lines {
+                        if line.hasPrefix("event:") {
+                            event = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+                        } else if line.hasPrefix("data:") {
+                            data.append(String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces))
+                        } else if line.isEmpty, !data.isEmpty {
+                            let payload = data.joined(separator: "\n")
+                            if event == "progress" {
+                                continuation.yield(.progress(payload))
+                            } else if event == "result", let raw = payload.data(using: .utf8) {
+                                continuation.yield(.result(try decoder.decode(AgentRun.self, from: raw)))
+                            } else if event == "error" {
+                                throw APIServiceError.server(payload)
+                            }
+                            event = "message"; data.removeAll(keepingCapacity: true)
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
     }
 
     // MARK: - 今日计划

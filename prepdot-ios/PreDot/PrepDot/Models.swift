@@ -18,8 +18,30 @@ struct Deck: Decodable, Identifiable, Hashable {
     let description: String?
     let cardCount: Int
     let reviewedCount: Int
+    let dueCount: Int
     let avgMemoryScore: Int
     let createdAt: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id, parentId, depth, title, type, category, description
+        case cardCount, reviewedCount, dueCount, avgMemoryScore, createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(Int.self, forKey: .id)
+        parentId = try values.decodeIfPresent(Int.self, forKey: .parentId)
+        depth = try values.decode(Int.self, forKey: .depth)
+        title = try values.decode(String.self, forKey: .title)
+        type = try values.decode(String.self, forKey: .type)
+        category = try values.decode(String.self, forKey: .category)
+        description = try values.decodeIfPresent(String.self, forKey: .description)
+        cardCount = try values.decode(Int.self, forKey: .cardCount)
+        reviewedCount = try values.decode(Int.self, forKey: .reviewedCount)
+        dueCount = try values.decodeIfPresent(Int.self, forKey: .dueCount) ?? 0
+        avgMemoryScore = try values.decode(Int.self, forKey: .avgMemoryScore)
+        createdAt = try values.decode(String.self, forKey: .createdAt)
+    }
 }
 
 // MARK: - 闪卡
@@ -51,6 +73,28 @@ struct Flashcard: Decodable, Identifiable, Hashable {
         else { return [] }
         return arr
     }
+
+    /// 兼容历史数据中的中文类型值，界面和新接口统一使用英文机器值。
+    var normalizedCardType: String {
+        switch cardType.lowercased() {
+        case "choice", "选择", "选择题": return "choice"
+        case "blank", "填空", "填空题": return "blank"
+        default: return "qa"
+        }
+    }
+}
+
+extension String {
+    /// 精选卡包常用分号连接编号项；展示时分行，但不修改数据库原文。
+    var cardDisplayText: String {
+        var result = self
+        for marker in ["②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"] {
+            result = result.replacingOccurrences(of: "； \(marker)", with: "；\n\(marker)")
+            result = result.replacingOccurrences(of: "；\(marker)", with: "；\n\(marker)")
+            result = result.replacingOccurrences(of: "; \(marker)", with: ";\n\(marker)")
+        }
+        return result
+    }
 }
 
 // MARK: - 今日计划
@@ -61,6 +105,36 @@ struct TodayPlan: Decodable {
     let completedCount: Int
     let estimatedMinutes: Int
     var cards: [Flashcard]
+    let deckProgress: [DeckReviewProgress]
+
+    private enum CodingKeys: String, CodingKey {
+        case planId, planDate, totalCount, completedCount, estimatedMinutes, cards, deckProgress
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        planId = try values.decode(Int.self, forKey: .planId)
+        planDate = try values.decode(String.self, forKey: .planDate)
+        totalCount = try values.decode(Int.self, forKey: .totalCount)
+        completedCount = try values.decode(Int.self, forKey: .completedCount)
+        estimatedMinutes = try values.decode(Int.self, forKey: .estimatedMinutes)
+        cards = try values.decode([Flashcard].self, forKey: .cards)
+        deckProgress = try values.decodeIfPresent([DeckReviewProgress].self, forKey: .deckProgress) ?? []
+    }
+}
+
+struct DeckReviewProgress: Decodable, Identifiable {
+    let deckId: Int
+    let deckTitle: String
+    let totalCount: Int
+    let completedCount: Int
+
+    var id: Int { deckId }
+    var pendingCount: Int { max(0, totalCount - completedCount) }
+    var isCompleted: Bool { totalCount > 0 && completedCount >= totalCount }
+    var progress: Double {
+        totalCount == 0 ? 0 : Double(completedCount) / Double(totalCount)
+    }
 }
 
 // MARK: - 新建卡组请求
@@ -68,6 +142,7 @@ struct CreateDeckRequest: Encodable {
     let title: String
     let category: String
     let description: String
+    let parentId: Int?
     let type: String = "自建"
 }
 

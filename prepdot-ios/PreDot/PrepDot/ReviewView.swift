@@ -39,6 +39,7 @@ struct ReviewView: View {
                         cards: pendingCards,
                         currentIndex: $currentIndex,
                         onFinish: { sessionDone = true },
+                        onExit: exitSession,
                         onCardChanged: applyCardUpdate
                     )
                     .navigationBarTitleDisplayMode(.inline)
@@ -81,6 +82,12 @@ struct ReviewView: View {
 
     private func resetSession() {
         sessionStarted = false; sessionDone = false; currentIndex = 0
+        Task { await loadPlan() }
+    }
+
+    private func exitSession() {
+        sessionStarted = false
+        currentIndex = 0
         Task { await loadPlan() }
     }
 }
@@ -148,96 +155,84 @@ struct PlanOverviewView: View {
     var body: some View {
         ZStack {
             AnimatedAuroraBackground()
-
-            VStack(spacing: 0) {
-                Spacer()
-
-                // 标题
-                VStack(spacing: 6) {
-                    Text("今日复习")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(textColor)
-                    Text(dateString())
-                        .font(.subheadline)
-                        .foregroundColor(subColor)
-                }
-                .padding(.bottom, 48)
-
-                // 进度圆环
-                ZStack {
-                    // 轨道
-                    Circle()
-                        .stroke(Color.white.opacity(0.12), lineWidth: 14)
-                        .frame(width: 220, height: 220)
-                    // 进度弧
-                    Circle()
-                        .trim(from: 0, to: CGFloat(progress))
-                        .stroke(
-                            AngularGradient(colors: [.indigo, Color(red: 0.7, green: 0.3, blue: 0.9), .pink],
-                                            center: .center, startAngle: .degrees(-90), endAngle: .degrees(270)),
-                            style: StrokeStyle(lineWidth: 14, lineCap: .round)
-                        )
-                        .frame(width: 220, height: 220)
-                        .rotationEffect(.degrees(-90))
-                        .animation(.easeOut(duration: 0.8), value: progress)
-                    // 圆环内容
-                    VStack(spacing: 4) {
-                        Text("\(pending)")
-                            .font(.system(size: 64, weight: .black, design: .rounded))
+            ScrollView {
+                VStack(spacing: 28) {
+                    VStack(spacing: 6) {
+                        Text("今日复习")
+                            .font(.system(size: 28, weight: .bold))
                             .foregroundColor(textColor)
-                        Text("张待复习")
+                        Text(dateString())
                             .font(.subheadline)
                             .foregroundColor(subColor)
-                        if plan.totalCount > 0 {
+                    }
+
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.12), lineWidth: 12)
+                        Circle()
+                            .trim(from: 0, to: CGFloat(progress))
+                            .stroke(
+                                AngularGradient(
+                                    colors: [.indigo, Color(red: 0.7, green: 0.3, blue: 0.9), .pink],
+                                    center: .center,
+                                    startAngle: .degrees(-90),
+                                    endAngle: .degrees(270)
+                                ),
+                                style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(-90))
+                            .animation(.easeOut(duration: 0.8), value: progress)
+                        VStack(spacing: 4) {
+                            Text("\(pending)")
+                                .font(.system(size: 54, weight: .black, design: .rounded))
+                                .foregroundColor(textColor)
+                            Text("张待复习")
+                                .font(.subheadline)
+                                .foregroundColor(subColor)
                             Text("\(Int(progress * 100))% 完成")
                                 .font(.caption)
                                 .foregroundColor(subColor)
-                                .padding(.top, 2)
                         }
                     }
-                }
+                    .frame(width: 190, height: 190)
 
-                // 统计信息
-                HStack(spacing: 36) {
-                    StatPill(icon: "checkmark.circle.fill",
-                             value: "\(plan.completedCount)/\(plan.totalCount)",
-                             label: "今日进度")
-                    StatPill(icon: "clock.fill",
-                             value: "≈\(plan.estimatedMinutes) 分钟",
-                             label: "预计时间")
-                }
-                .padding(.top, 40)
+                    HStack(spacing: 24) {
+                        StatPill(icon: "checkmark.circle.fill",
+                                 value: "\(plan.completedCount)/\(plan.totalCount)",
+                                 label: "今日进度")
+                        StatPill(icon: "clock.fill",
+                                 value: "≈\(plan.estimatedMinutes) 分钟",
+                                 label: "预计时间")
+                    }
 
-                Spacer()
+                    if !plan.deckProgress.isEmpty {
+                        DeckProgressSection(items: plan.deckProgress)
+                    }
 
-                // 开始按钮
-                Button(action: onStart) {
-                    HStack(spacing: 10) {
-                        Text(pending == 0 ? "今日已完成" : "开始复习")
-                            .font(.headline)
-                        if pending > 0 {
+                    Button(action: onStart) {
+                        HStack(spacing: 10) {
+                            Text(plan.completedCount > 0 ? "继续复习" : "开始复习")
+                                .font(.headline)
                             Image(systemName: "arrow.right")
                                 .font(.headline)
                         }
+                        .frame(maxWidth: 280)
+                        .padding(.vertical, 18)
+                        .background(
+                            LinearGradient(
+                                colors: [.indigo, Color(red: 0.55, green: 0.3, blue: 0.95)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                        .shadow(color: Color.indigo.opacity(0.5), radius: 16, y: 6)
                     }
-                    .frame(maxWidth: 280)
-                    .padding(.vertical, 18)
-                    .background(
-                        Group {
-                            if pending == 0 {
-                                Color.white.opacity(0.2)
-                            } else {
-                                LinearGradient(colors: [.indigo, Color(red: 0.55, green: 0.3, blue: 0.95)],
-                                               startPoint: .leading, endPoint: .trailing)
-                            }
-                        }
-                    )
-                    .foregroundColor(.white)
-                    .clipShape(Capsule())
-                    .shadow(color: Color.indigo.opacity(0.5), radius: 16, y: 6)
+                    .padding(.bottom, 72)
                 }
-                .disabled(pending == 0)
-                .padding(.bottom, 60)
+                .padding(.horizontal, 24)
+                .padding(.top, 36)
             }
         }
     }
@@ -247,6 +242,54 @@ struct PlanOverviewView: View {
         fmt.locale = Locale(identifier: "zh_CN")
         fmt.dateFormat = "M月d日 EEEE"
         return fmt.string(from: Date())
+    }
+}
+
+private struct DeckProgressSection: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let items: [DeckReviewProgress]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("卡组进度")
+                .font(.headline)
+            ForEach(items) { item in
+                VStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "rectangle.stack.fill")
+                            .foregroundStyle(item.isCompleted ? .green : .indigo)
+                        Text(item.deckTitle)
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                        Spacer()
+                        if item.isCompleted {
+                            Text("已完成")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.green)
+                        } else {
+                            Text("剩余 \(item.pendingCount) 张")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text("\(item.completedCount)/\(item.totalCount)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    ProgressView(value: item.progress)
+                        .tint(item.isCompleted ? .green : .indigo)
+                }
+            }
+        }
+        .foregroundStyle(colorScheme == .dark ? .white : Color(red: 0.15, green: 0.05, blue: 0.35))
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.white.opacity(0.58))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(Color.white.opacity(0.7), lineWidth: 1)
+        )
     }
 }
 
@@ -282,6 +325,7 @@ struct CardSessionView: View {
     let cards: [Flashcard]
     @Binding var currentIndex: Int
     let onFinish: () -> Void
+    let onExit: () -> Void
     /// 卡片内容/笔记被修改后回调，用于原地刷新
     var onCardChanged: (Flashcard) -> Void = { _ in }
 
@@ -328,6 +372,13 @@ struct CardSessionView: View {
             Spacer()
         }
         .padding(.top)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(action: onExit) {
+                    Label("退出复习", systemImage: "xmark")
+                }
+            }
+        }
         .onChange(of: currentIndex) { _, _ in flipped = false; showRating = false }
         .sheet(isPresented: $showChat) {
             CoachChatSheet(card: current)
@@ -410,9 +461,9 @@ struct CardFace: View {
         VStack(spacing: 12) {
             // 顶部：类型标记 + 提示
             HStack {
-                if card.cardType != "qa" {
-                    TypeBadge(label: card.cardType == "choice" ? "选择题" : "填空题",
-                              color: card.cardType == "choice" ? .orange : .teal)
+                if card.normalizedCardType != "qa" {
+                    TypeBadge(label: card.normalizedCardType == "choice" ? "选择题" : "填空题",
+                              color: card.normalizedCardType == "choice" ? .orange : .teal)
                 }
                 Spacer()
                 Text(hint).font(.caption).foregroundColor(.secondary)
@@ -423,7 +474,7 @@ struct CardFace: View {
                 backContent
             } else {
                 Spacer()
-                Text(card.question)
+                Text(attributedQuestion)
                     .font(.title3).fontWeight(.semibold)
                     .multilineTextAlignment(.center).lineSpacing(4)
                 Spacer()
@@ -476,7 +527,7 @@ struct CardFace: View {
                 .lineSpacing(4)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if card.cardType == "choice" && !card.parsedOptions.isEmpty {
+            if card.normalizedCardType == "choice" && !card.parsedOptions.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(card.parsedOptions.indices, id: \.self) { i in
                         let prefix = ["A", "B", "C", "D"][safe: i] ?? "\(i+1)"
@@ -525,7 +576,7 @@ struct CardFace: View {
 
     private func attributed(markdown: String) -> AttributedString {
         if let attr = try? AttributedString(
-            markdown: markdown,
+            markdown: markdown.cardDisplayText,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         ) {
             return attr

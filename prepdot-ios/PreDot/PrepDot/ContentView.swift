@@ -14,11 +14,14 @@ struct ContentView: View {
                 .tabItem { Label("今日复习", systemImage: "brain.head.profile") }
                 .tag(0)
             DecksView()
-                .tabItem { Label("我的卡组", systemImage: "rectangle.stack.fill") }
+                .tabItem { Label("知识树", systemImage: "point.3.connected.trianglepath.dotted") }
                 .tag(1)
+            LearningCoachView()
+                .tabItem { Label("学习教练", systemImage: "sparkles") }
+                .tag(2)
             ProfileTabView()
                 .tabItem { Label("我的", systemImage: "person.crop.circle.fill") }
-                .tag(2)
+                .tag(3)
         }
         .tint(.indigo)
     }

@@ -18,6 +18,8 @@ public interface DeckService {
 
     DeckVO update(Long id, DeckRequest request);
 
+    DeckVO move(Long id, Long parentId, Long userId);
+
     void delete(Long id);
 
     List<Flashcard> listCards(Long deckId);

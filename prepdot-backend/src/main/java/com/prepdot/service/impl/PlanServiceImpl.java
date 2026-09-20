@@ -18,8 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -59,13 +62,41 @@ public class PlanServiceImpl implements PlanService {
         List<DailyPlanItem> items = planItemMapper.selectList(
                 new LambdaQueryWrapper<DailyPlanItem>()
                         .eq(DailyPlanItem::getPlanId, plan.getId())
-                        .eq(DailyPlanItem::getStatus, "pending")
         );
 
         List<Long> cardIds = items.stream().map(DailyPlanItem::getCardId).collect(Collectors.toList());
-        List<Flashcard> cards = cardIds.isEmpty() ? List.of() : flashcardMapper.selectBatchIds(cardIds);
+        List<Flashcard> allCards = cardIds.isEmpty() ? List.of() : flashcardMapper.selectBatchIds(cardIds);
+        Map<Long, Flashcard> cardsById = allCards.stream()
+                .collect(Collectors.toMap(Flashcard::getId, Function.identity()));
+        List<Flashcard> cards = items.stream()
+                .filter(item -> "pending".equals(item.getStatus()))
+                .map(item -> cardsById.get(item.getCardId()))
+                .filter(java.util.Objects::nonNull)
+                .toList();
         LocalDateTime now = LocalDateTime.now();
         cards.forEach(card -> card.setMemoryScore(fsrsMemoryService.currentScore(card, now)));
+
+        List<Long> deckIds = allCards.stream().map(Flashcard::getDeckId).distinct().toList();
+        Map<Long, String> deckTitles = deckIds.isEmpty() ? Map.of() : deckMapper.selectBatchIds(deckIds)
+                .stream()
+                .collect(Collectors.toMap(Deck::getId, Deck::getTitle));
+        Map<Long, TodayPlanVO.DeckProgress> progressByDeck = new LinkedHashMap<>();
+        for (DailyPlanItem item : items) {
+            Flashcard card = cardsById.get(item.getCardId());
+            if (card == null) continue;
+            TodayPlanVO.DeckProgress progress = progressByDeck.computeIfAbsent(card.getDeckId(), deckId -> {
+                TodayPlanVO.DeckProgress value = new TodayPlanVO.DeckProgress();
+                value.setDeckId(deckId);
+                value.setDeckTitle(deckTitles.getOrDefault(deckId, "未命名卡组"));
+                value.setTotalCount(0);
+                value.setCompletedCount(0);
+                return value;
+            });
+            progress.setTotalCount(progress.getTotalCount() + 1);
+            if ("done".equals(item.getStatus())) {
+                progress.setCompletedCount(progress.getCompletedCount() + 1);
+            }
+        }
 
         TodayPlanVO vo = new TodayPlanVO();
         vo.setPlanId(plan.getId());
@@ -74,6 +105,7 @@ public class PlanServiceImpl implements PlanService {
         vo.setCompletedCount(plan.getCompletedCount());
         vo.setEstimatedMinutes(plan.getEstimatedMinutes());
         vo.setCards(cards);
+        vo.setDeckProgress(new ArrayList<>(progressByDeck.values()));
         return vo;
     }
 

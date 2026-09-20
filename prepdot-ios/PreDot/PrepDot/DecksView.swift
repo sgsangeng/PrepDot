@@ -6,32 +6,79 @@ private extension Array {
     }
 }
 
+private struct DeckTreeNode: Identifiable {
+    let deck: Deck
+    let children: [DeckTreeNode]?
+
+    var id: Int { deck.id }
+}
+
+private func makeDeckTree(from decks: [Deck]) -> [DeckTreeNode] {
+    let knownIds = Set(decks.map(\.id))
+    var childrenByParent: [Int: [Deck]] = [:]
+    for deck in decks {
+        if let parentID = deck.parentId {
+            childrenByParent[parentID, default: []].append(deck)
+        }
+    }
+
+    func sorted(_ values: [Deck]) -> [Deck] {
+        values.sorted { lhs, rhs in
+            lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+        }
+    }
+
+    func build(_ deck: Deck, ancestors: Set<Int>) -> DeckTreeNode {
+        let nextAncestors = ancestors.union([deck.id])
+        let childNodes = sorted(childrenByParent[deck.id, default: []])
+            .filter { !nextAncestors.contains($0.id) }
+            .map { build($0, ancestors: nextAncestors) }
+        return DeckTreeNode(deck: deck, children: childNodes.isEmpty ? nil : childNodes)
+    }
+
+    let roots = decks.filter { deck in
+        guard let parentID = deck.parentId else { return true }
+        return !knownIds.contains(parentID)
+    }
+    return sorted(roots).map { build($0, ancestors: []) }
+}
+
+private func filterDeckTree(_ nodes: [DeckTreeNode], query: String) -> [DeckTreeNode] {
+    guard !query.isEmpty else { return nodes }
+    return nodes.compactMap { node in
+        let filteredChildren = filterDeckTree(node.children ?? [], query: query)
+        let deck = node.deck
+        let matches = deck.title.localizedCaseInsensitiveContains(query)
+            || deck.category.localizedCaseInsensitiveContains(query)
+            || (deck.description?.localizedCaseInsensitiveContains(query) ?? false)
+        guard matches || !filteredChildren.isEmpty else { return nil }
+        return DeckTreeNode(
+            deck: deck,
+            children: filteredChildren.isEmpty ? nil : filteredChildren
+        )
+    }
+}
+
 struct DecksView: View {
     @State private var decks: [Deck] = []
     @State private var loading = true
     @State private var showCreate = false
     @State private var showAIGenerate = false
     @State private var showCommunity = false
-    @State private var selectedDeck: Deck?
+    @State private var selectedDeckID: Int?
     @State private var editingDeck: Deck?
     @State private var searchText = ""
     @State private var showGraph = false
     @State private var loadError = ""
 
-    // 只显示根卡组（parentId == nil），子卡组在详情页里展开
-    private var rootDecks: [Deck] { decks.filter { $0.parentId == nil } }
+    private var selectedDeck: Deck? {
+        decks.first { $0.id == selectedDeckID }
+    }
 
-    // 搜索过滤
-    private var filteredDecks: [Deck] {
-        if searchText.trimmingCharacters(in: .whitespaces).isEmpty {
-            return rootDecks
-        }
-        let q = searchText.lowercased()
-        return rootDecks.filter {
-            $0.title.lowercased().contains(q) ||
-            $0.category.lowercased().contains(q) ||
-            ($0.description?.lowercased().contains(q) ?? false)
-        }
+    private var displayedTree: [DeckTreeNode] {
+        let tree = makeDeckTree(from: decks)
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return filterDeckTree(tree, query: query)
     }
 
     var body: some View {
@@ -56,34 +103,46 @@ struct DecksView: View {
                         systemImage: "tray",
                         description: Text("点击右上角 + 新建第一个卡组")
                     )
-                } else if filteredDecks.isEmpty {
+                } else if displayedTree.isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 } else {
-                    List(filteredDecks, selection: $selectedDeck) { deck in
-                        DeckRow(deck: deck).tag(deck)
+                    List(selection: $selectedDeckID) {
+                        OutlineGroup(displayedTree, children: \.children) { node in
+                            NavigationLink(value: node.deck.id) {
+                                KnowledgeTreeRow(
+                                    deck: node.deck,
+                                    hasChildren: !(node.children?.isEmpty ?? true)
+                                )
+                            }
+                            .tag(node.deck.id)
                             .swipeActions(edge: .leading) {
-                                Button { editingDeck = deck } label: {
+                                Button { editingDeck = node.deck } label: {
                                     Label("编辑", systemImage: "pencil")
                                 }
                                 .tint(.indigo)
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(role: .destructive) {
-                                    deleteDeck(deck)
+                                    deleteDeck(node.deck)
                                 } label: {
                                     Label("删除", systemImage: "trash")
                                 }
                             }
+                        }
                     }
                     .listStyle(.insetGrouped)
-                    .searchable(text: $searchText, prompt: "搜索卡组名称或分类")
+                    .searchable(text: $searchText, prompt: "搜索知识节点")
+                    .refreshable {
+                        await refreshDecks()
+                    }
+                    .searchable(text: $searchText, prompt: "搜索知识节点")
                 }
             }
-            .navigationTitle("我的卡组")
+            .navigationTitle("知识树")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { showGraph = true }) {
-                        Label("知识图谱", systemImage: "point.3.connected.trianglepath.dotted")
+                        Label("掌握度地图", systemImage: "chart.dots.scatter")
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -104,16 +163,16 @@ struct DecksView: View {
                 }
             }
             .sheet(isPresented: $showCreate, onDismiss: loadDecks) {
-                CreateDeckSheet()
+                CreateDeckSheet(decks: decks)
             }
             .sheet(isPresented: $showAIGenerate, onDismiss: loadDecks) {
                 AIGenerateView(onComplete: loadDecks)
             }
-            .sheet(isPresented: $showCommunity) {
-                CommunityView()
+            .sheet(isPresented: $showCommunity, onDismiss: loadDecks) {
+                CommunityView(onImported: loadDecks)
             }
             .sheet(item: $editingDeck, onDismiss: loadDecks) { deck in
-                EditDeckSheet(deck: deck)
+                EditDeckSheet(deck: deck, decks: decks)
             }
             .fullScreenCover(isPresented: $showGraph) {
                 NavigationStack { KnowledgeGraphView() }
@@ -127,9 +186,9 @@ struct DecksView: View {
                     DeckDetailView(deck: deck)
                 } else {
                     ContentUnavailableView(
-                        "选择一个卡组",
-                        systemImage: "rectangle.stack",
-                        description: Text("从左侧选择卡组查看卡片")
+                        "选择一个知识节点",
+                        systemImage: "point.3.connected.trianglepath.dotted",
+                        description: Text("从知识树中选择节点查看卡片")
                     )
                 }
             }
@@ -137,14 +196,31 @@ struct DecksView: View {
     }
 
     private func loadDecks() {
-        loading = true
-        loadError = ""
         Task {
-            do {
-                decks = try await APIService.shared.fetchDecks()
-            } catch {
-                loadError = error.localizedDescription
+            await refreshDecks(showLoading: true)
+        }
+    }
+
+    @MainActor
+    private func refreshDecks(showLoading: Bool = false) async {
+        if showLoading {
+            loading = true
+        }
+
+        loadError = ""
+
+        do {
+            decks = try await APIService.shared.fetchDecks()
+
+            if let selectedDeckID,
+               !decks.contains(where: { $0.id == selectedDeckID }) {
+                self.selectedDeckID = nil
             }
+        } catch {
+            loadError = error.localizedDescription
+        }
+
+        if showLoading {
             loading = false
         }
     }
@@ -153,22 +229,89 @@ struct DecksView: View {
         Task {
             do {
                 try await APIService.shared.deleteDeck(id: deck.id)
-                decks.removeAll { $0.id == deck.id }
-                if selectedDeck?.id == deck.id { selectedDeck = nil }
+                if selectedDeckID == deck.id { selectedDeckID = nil }
+                loadDecks()
             } catch {}
         }
+    }
+}
+
+// MARK: - 知识树节点
+private struct KnowledgeTreeRow: View {
+    let deck: Deck
+    let hasChildren: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: hasChildren ? "point.3.connected.trianglepath.dotted" : "rectangle.stack")
+                .font(.title3)
+                .foregroundStyle(statusColor)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(deck.title)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                HStack(spacing: 10) {
+                    Label("\(deck.cardCount) 张", systemImage: "rectangle.stack")
+                    if deck.dueCount > 0 {
+                        Label("\(deck.dueCount) 到期", systemImage: "clock.badge.exclamationmark")
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(deck.cardCount == 0 ? "暂无卡片" : "\(deck.avgMemoryScore)%")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(deck.cardCount == 0 ? Color.secondary : statusColor)
+                ProgressView(value: Double(deck.avgMemoryScore), total: 100)
+                    .tint(statusColor)
+                    .frame(width: 54)
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var statusColor: Color {
+        guard deck.cardCount > 0 else { return .secondary }
+        if deck.dueCount > 0 || deck.avgMemoryScore < 40 { return .red }
+        if deck.avgMemoryScore < 70 { return .orange }
+        return .green
     }
 }
 
 // MARK: - 编辑卡组 Sheet
 struct EditDeckSheet: View {
     let deck: Deck
+    let decks: [Deck]
     @Environment(\.dismiss) var dismiss
 
     @State private var title       = ""
     @State private var category    = ""
     @State private var description = ""
     @State private var saving      = false
+    @State private var parentSelection = 0
+    @State private var saveError = ""
+
+    private var parentCandidates: [Deck] {
+        let descendants = descendantIDs(of: deck.id, in: decks)
+        let maxRelativeDepth = decks
+            .filter { descendants.contains($0.id) }
+            .map { max(0, $0.depth - deck.depth) }
+            .max() ?? 0
+        return decks.filter {
+            $0.id != deck.id
+                && !descendants.contains($0.id)
+                && $0.depth + 1 + maxRelativeDepth <= 2
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -178,6 +321,18 @@ struct EditDeckSheet: View {
                     TextField("分类", text: $category)
                     TextField("描述（可选）", text: $description, axis: .vertical)
                         .lineLimit(3)
+                }
+                Section("知识树位置") {
+                    Picker("父节点", selection: $parentSelection) {
+                        Text("根节点").tag(0)
+                        ForEach(parentCandidates) { candidate in
+                            Text(String(repeating: "　", count: candidate.depth) + candidate.title)
+                                .tag(candidate.id)
+                        }
+                    }
+                }
+                if !saveError.isEmpty {
+                    Section { Text(saveError).foregroundStyle(.red) }
                 }
             }
             .navigationTitle("编辑卡组")
@@ -196,6 +351,7 @@ struct EditDeckSheet: View {
                 title       = deck.title
                 category    = deck.category
                 description = deck.description ?? ""
+                parentSelection = deck.parentId ?? 0
             }
         }
     }
@@ -204,14 +360,22 @@ struct EditDeckSheet: View {
         saving = true
         Task {
             do {
-                try await APIService.shared.updateDeck(
+                _ = try await APIService.shared.updateDeck(
                     id: deck.id,
                     title: title.trimmingCharacters(in: .whitespaces),
                     category: category.trimmingCharacters(in: .whitespaces),
                     description: description.trimmingCharacters(in: .whitespaces)
                 )
+                if parentSelection != (deck.parentId ?? 0) {
+                    _ = try await APIService.shared.moveDeck(
+                        id: deck.id,
+                        parentId: parentSelection == 0 ? nil : parentSelection
+                    )
+                }
                 dismiss()
-            } catch {}
+            } catch {
+                saveError = error.localizedDescription
+            }
             saving = false
         }
     }
@@ -245,7 +409,7 @@ struct DeckRow: View {
 
             HStack(spacing: 20) {
                 StatBadge(value: deck.cardCount, label: "卡片")
-                StatBadge(value: deck.reviewedCount, label: "已复习")
+                StatBadge(value: deck.dueCount, label: "到期")
                 StatBadge(value: deck.avgMemoryScore, label: "记忆度")
                 Spacer()
                 // 记忆度进度条
@@ -470,16 +634,16 @@ struct CardRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     // 卡片类型徽标
-                    if card.cardType == "choice" {
+                    if card.normalizedCardType == "choice" {
                         TypeBadge(label: "选择", color: .orange)
-                    } else if card.cardType == "blank" {
+                    } else if card.normalizedCardType == "blank" {
                         TypeBadge(label: "填空", color: .teal)
                     }
                     Text(card.question).font(.headline).lineLimit(2)
                 }
 
                 // 选择题展示选项
-                if card.cardType == "choice" && !card.parsedOptions.isEmpty {
+                if card.normalizedCardType == "choice" && !card.parsedOptions.isEmpty {
                     let opts = card.parsedOptions
                     ForEach(opts.indices, id: \.self) { i in
                         let prefix = ["A", "B", "C", "D"][safe: i] ?? "\(i+1)"
@@ -488,7 +652,7 @@ struct CardRow: View {
                             .foregroundColor(opts[i] == card.answer ? .green : .secondary)
                     }
                 } else {
-                    Text(card.answer)
+                    Text(card.answer.cardDisplayText)
                         .font(.subheadline).foregroundColor(.secondary).lineLimit(2)
                 }
 
@@ -527,9 +691,15 @@ struct CardFormSheet: View {
     @Environment(\.dismiss) var dismiss
 
     enum CardMode: String, CaseIterable {
-        case qa     = "问答"
-        case choice = "选择题"
-        case blank  = "填空"
+        case qa, choice, blank
+
+        var title: String {
+            switch self {
+            case .qa: return "问答"
+            case .choice: return "选择题"
+            case .blank: return "填空"
+            }
+        }
     }
 
     @State private var mode: CardMode = .qa
@@ -540,6 +710,7 @@ struct CardFormSheet: View {
     @State private var optionC = ""; @State private var optionD = ""
     @State private var correctIndex = 0
     @State private var saving = false
+    @State private var saveError = ""
 
     var isEdit: Bool { editing != nil }
 
@@ -550,7 +721,9 @@ struct CardFormSheet: View {
         case .qa, .blank:
             return !answer.trimmingCharacters(in: .whitespaces).isEmpty
         case .choice:
-            return !optionA.isEmpty && !optionB.isEmpty
+            return !optionA.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !optionB.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !selectedOption.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
 
@@ -560,10 +733,9 @@ struct CardFormSheet: View {
                 // ── 类型选择
                 Section {
                     Picker("卡片类型", selection: $mode) {
-                        ForEach(CardMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        ForEach(CardMode.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
-                    .disabled(isEdit)   // 编辑时不允许改类型
                 } footer: {
                     switch mode {
                     case .qa:     Text("正面写问题，背面写答案，复习时翻转查看")
@@ -575,13 +747,13 @@ struct CardFormSheet: View {
                 // ── 问题
                 Section("问题") {
                     if mode == .blank {
-                        TextEditor(text: $question).frame(minHeight: 80)
+                        MarkdownEditor(text: $question, placeholder: "输入带有 ____ 的问题", minHeight: 90)
                         Button(action: { question += "____" }) {
                             Label("插入填空符 ____", systemImage: "square.and.pencil")
                                 .font(.caption).foregroundColor(.indigo)
                         }
                     } else {
-                        TextField("输入问题", text: $question, axis: .vertical).lineLimit(3...6)
+                        MarkdownEditor(text: $question, placeholder: "输入问题", minHeight: 90)
                     }
                 }
 
@@ -589,7 +761,7 @@ struct CardFormSheet: View {
                 switch mode {
                 case .qa:
                     Section("答案") {
-                        TextField("输入答案", text: $answer, axis: .vertical).lineLimit(4...10)
+                        MarkdownEditor(text: $answer, placeholder: "输入答案，可回车换行", minHeight: 150)
                     }
                 case .choice:
                     Section("选项（至少填 A、B）") {
@@ -603,6 +775,9 @@ struct CardFormSheet: View {
                         TextField("按顺序填写答案，多个答案用分号分隔", text: $answer, axis: .vertical)
                             .lineLimit(2...6)
                     }
+                }
+                if !saveError.isEmpty {
+                    Section { Text(saveError).foregroundStyle(.red) }
                 }
             }
             .navigationTitle(isEdit ? "编辑卡片" : "新建卡片")
@@ -629,7 +804,8 @@ struct CardFormSheet: View {
                     .foregroundColor(correctIndex == index ? .green : .secondary.opacity(0.4))
             }
             .buttonStyle(.plain)
-            TextField(label, text: text)
+            TextField(label, text: text, axis: .vertical)
+                .lineLimit(1...4)
         }
     }
 
@@ -637,7 +813,7 @@ struct CardFormSheet: View {
         guard let card = editing else { return }
         question = card.question
         answer   = card.answer
-        mode     = CardMode(rawValue: card.cardType) ?? .qa
+        mode     = CardMode(rawValue: card.normalizedCardType) ?? .qa
         if mode == .choice {
             let opts = card.parsedOptions
             optionA = opts[safe: 0] ?? ""
@@ -664,7 +840,9 @@ struct CardFormSheet: View {
                         cardType: mode.rawValue, options: optionsJson)
                 }
                 dismiss()
-            } catch {}
+            } catch {
+                saveError = error.localizedDescription
+            }
             saving = false
         }
     }
@@ -675,23 +853,86 @@ struct CardFormSheet: View {
         case .qa, .blank:
             return (answer, nil)
         case .choice:
-            var opts = [optionA, optionB]
-            if !optionC.isEmpty { opts.append(optionC) }
-            if !optionD.isEmpty { opts.append(optionD) }
-            let correctAnswer = opts[safe: correctIndex] ?? opts[0]
+            let indexedOptions = [optionA, optionB, optionC, optionD].enumerated().compactMap { index, value in
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : (index, trimmed)
+            }
+            let opts = indexedOptions.map(\.1)
+            let correctAnswer = indexedOptions.first { $0.0 == correctIndex }?.1 ?? opts[0]
             let json = (try? String(data: JSONEncoder().encode(opts), encoding: .utf8)) ?? "[]"
             return (correctAnswer, json)
         }
+    }
+
+    private var selectedOption: String {
+        [optionA, optionB, optionC, optionD][safe: correctIndex] ?? ""
+    }
+}
+
+private struct MarkdownEditor: View {
+    @Binding var text: String
+    let placeholder: String
+    let minHeight: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(placeholder)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 8)
+                }
+                TextEditor(text: $text)
+                    .frame(minHeight: minHeight)
+                    .scrollContentBackground(.hidden)
+            }
+
+            HStack(spacing: 16) {
+                formatButton("bold", "加粗") { append("**重点**") }
+                formatButton("list.bullet", "列表") { appendLine("- ") }
+                formatButton("list.number", "编号") { appendLine("1. ") }
+                formatButton("chevron.left.forwardslash.chevron.right", "代码") { append("`代码`") }
+            }
+            .font(.caption)
+        }
+    }
+
+    private func formatButton(
+        _ icon: String, _ label: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(label, systemImage: icon)
+        }
+        .buttonStyle(.borderless)
+    }
+
+    private func append(_ value: String) {
+        text += value
+    }
+
+    private func appendLine(_ value: String) {
+        if !text.isEmpty && !text.hasSuffix("\n") {
+            text += "\n"
+        }
+        text += value
     }
 }
 
 // MARK: - 新建卡组 Sheet
 struct CreateDeckSheet: View {
+    let decks: [Deck]
     @Environment(\.dismiss) var dismiss
     @State private var title = ""
     @State private var category = "综合"
     @State private var description = ""
     @State private var saving = false
+    @State private var parentSelection = 0
+    @State private var saveError = ""
+
+    private var parentCandidates: [Deck] {
+        decks.filter { $0.depth < 2 }
+    }
 
     var body: some View {
         NavigationStack {
@@ -701,6 +942,18 @@ struct CreateDeckSheet: View {
                     TextField("分类", text: $category)
                     TextField("描述（可选）", text: $description, axis: .vertical)
                         .lineLimit(3)
+                }
+                Section("知识树位置") {
+                    Picker("父节点", selection: $parentSelection) {
+                        Text("根节点").tag(0)
+                        ForEach(parentCandidates) { deck in
+                            Text(String(repeating: "　", count: deck.depth) + deck.title)
+                                .tag(deck.id)
+                        }
+                    }
+                }
+                if !saveError.isEmpty {
+                    Section { Text(saveError).foregroundStyle(.red) }
                 }
             }
             .navigationTitle("新建卡组")
@@ -724,11 +977,34 @@ struct CreateDeckSheet: View {
         Task {
             do {
                 _ = try await APIService.shared.createDeck(
-                    CreateDeckRequest(title: title, category: category, description: description)
+                    CreateDeckRequest(
+                        title: title,
+                        category: category,
+                        description: description,
+                        parentId: parentSelection == 0 ? nil : parentSelection
+                    )
                 )
                 dismiss()
-            } catch {}
+            } catch {
+                saveError = error.localizedDescription
+            }
             saving = false
         }
     }
+}
+
+private func descendantIDs(of rootID: Int, in decks: [Deck]) -> Set<Int> {
+    var childrenByParent: [Int: [Int]] = [:]
+    for deck in decks {
+        if let parentID = deck.parentId {
+            childrenByParent[parentID, default: []].append(deck.id)
+        }
+    }
+    var result: Set<Int> = []
+    var queue = childrenByParent[rootID, default: []]
+    while let current = queue.popLast() {
+        guard result.insert(current).inserted else { continue }
+        queue.append(contentsOf: childrenByParent[current, default: []])
+    }
+    return result
 }

@@ -4,6 +4,7 @@ import com.prepdot.common.BusinessException;
 import com.prepdot.common.Result;
 import com.prepdot.common.UserContext;
 import com.prepdot.dto.request.DeckRequest;
+import com.prepdot.dto.request.DeckMoveRequest;
 import com.prepdot.dto.response.DeckVO;
 import com.prepdot.entity.Deck;
 import com.prepdot.entity.Flashcard;
@@ -52,6 +53,13 @@ public class DeckController {
     public Result<DeckVO> update(@PathVariable Long id, @RequestBody DeckRequest request) {
         checkOwner(id, UserContext.getUserId());
         return Result.success(deckService.update(id, request));
+    }
+
+    @Operation(summary = "移动知识树节点")
+    @PutMapping("/{id}/parent")
+    public Result<DeckVO> move(@PathVariable Long id, @RequestBody DeckMoveRequest request) {
+        checkOwner(id, UserContext.getUserId());
+        return Result.success(deckService.move(id, request.getParentId(), UserContext.getUserId()));
     }
 
     @Operation(summary = "删除卡组")

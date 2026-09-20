@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "stack_id": "eff921ab-3ac0-4244-beb2-f3ef41c249e6",
+  "stack_name": "qianwenai-prepdot-202609011739",
+  "region_id": "cn-hangzhou",
+  "created_at": "2026-09-01T09:39:48.307335Z",
+  "tags": [
+    {
+      "Key": "from",
+      "Value": "qianwenai"
+    },
+    {
+      "Key": "qianwenai-appName",
+      "Value": "prepdot"
+    }
+  ],
+  "provisional": true
+}

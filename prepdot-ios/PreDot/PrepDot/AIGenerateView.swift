@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 struct AIGenerateView: View {
     @Environment(\.dismiss) var dismiss
@@ -254,12 +255,20 @@ struct AIGenerateView: View {
 
     private var pasteSection: some View {
         Section {
-            TextEditor(text: $pastedText)
+            IMECompatibleTextEditor(text: $pastedText)
                 .frame(minHeight: 160)
-                .font(.system(.body))
-            if !pastedText.isEmpty {
-                HStack {
-                    Spacer()
+            HStack {
+                Button {
+                    guard let clipboardText = UIPasteboard.general.string,
+                          !clipboardText.isEmpty else { return }
+                    pastedText = clipboardText
+                } label: {
+                    Label("粘贴", systemImage: "doc.on.clipboard")
+                }
+                .font(.caption)
+
+                Spacer()
+                if !pastedText.isEmpty {
                     Text("\(pastedText.count) 字").font(.caption2).foregroundColor(.secondary)
                     Button("清空") { pastedText = "" }.font(.caption2).foregroundColor(.red)
                 }
@@ -538,6 +547,46 @@ struct AIGenerateView: View {
         case "docx", "doc": return "doc.text.fill"
         case "pptx", "ppt": return "rectangle.stack.fill"
         default:            return "doc.text"
+        }
+    }
+}
+
+/// 中文输入法在拼音候选尚未确认时会保留 markedText；此时不向 SwiftUI 回写，
+/// 避免视图刷新中断组合输入，造成只能输入英文或拼音。
+private struct IMECompatibleTextEditor: UIViewRepresentable {
+    @Binding var text: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.delegate = context.coordinator
+        textView.font = .preferredFont(forTextStyle: .body)
+        textView.adjustsFontForContentSizeCategory = true
+        textView.backgroundColor = .clear
+        textView.textContainerInset = UIEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
+        textView.textContainer.lineFragmentPadding = 0
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        guard textView.markedTextRange == nil, textView.text != text else { return }
+        textView.text = text
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        private var text: Binding<String>
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            guard textView.markedTextRange == nil else { return }
+            text.wrappedValue = textView.text
         }
     }
 }

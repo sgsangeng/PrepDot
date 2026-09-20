@@ -17,6 +17,9 @@ public class DeckRequest {
 
     private String description;
 
+    /** 新建时所属的父节点；为空表示根节点 */
+    private Long parentId;
+
     /** 批量导入时携带的卡片列表（可选） */
     private List<CardRequest> cards;
 }

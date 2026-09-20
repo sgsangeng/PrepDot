@@ -1,15 +1,23 @@
 package com.prepdot.service;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.prepdot.algorithm.FsrsScheduler;
 import com.prepdot.dto.request.ReviewRequest;
+import com.prepdot.dto.response.TodayPlanVO;
+import com.prepdot.entity.DailyPlan;
+import com.prepdot.entity.DailyPlanItem;
 import com.prepdot.entity.Deck;
 import com.prepdot.entity.Flashcard;
 import com.prepdot.mapper.*;
 import com.prepdot.service.impl.PlanServiceImpl;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -69,6 +77,51 @@ class PlanServiceImplFsrsTest {
         assertEquals(result.getLastReviewedAt(), result.getNextReviewAt());
     }
 
+    @Test
+    void todayPlanContainsProgressForEveryDeckIncludingCompletedItems() {
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), "test"), DailyPlan.class);
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), "test"), DailyPlanItem.class);
+        FsrsMemoryService mockedMemoryService = mock(FsrsMemoryService.class);
+        PlanServiceImpl planService = new PlanServiceImpl(
+                planMapper, itemMapper, cardMapper, recordMapper,
+                deckMapper, scheduler, mockedMemoryService);
+
+        DailyPlan plan = new DailyPlan();
+        plan.setId(100L);
+        plan.setUserId(7L);
+        plan.setPlanDate(LocalDate.now());
+        plan.setTotalCount(3);
+        plan.setCompletedCount(1);
+        plan.setEstimatedMinutes(6);
+        when(planMapper.selectOne(any())).thenReturn(plan);
+
+        DailyPlanItem done = planItem(1L, "done");
+        DailyPlanItem pendingA = planItem(2L, "pending");
+        DailyPlanItem pendingB = planItem(3L, "pending");
+        when(itemMapper.selectList(any())).thenReturn(List.of(done, pendingA, pendingB));
+        when(cardMapper.selectAllDueCards(7L)).thenReturn(List.of());
+
+        Flashcard card1 = planCard(1L, 10L);
+        Flashcard card2 = planCard(2L, 10L);
+        Flashcard card3 = planCard(3L, 20L);
+        when(cardMapper.selectBatchIds(any())).thenReturn(List.of(card1, card2, card3));
+        Deck deckA = deck(10L, "Redis");
+        Deck deckB = deck(20L, "MySQL");
+        when(deckMapper.selectBatchIds(any())).thenReturn(List.of(deckA, deckB));
+        when(mockedMemoryService.currentScore(any(), any())).thenReturn(35);
+
+        TodayPlanVO result = planService.getTodayPlan(7L);
+
+        assertEquals(2, result.getCards().size());
+        assertEquals(2, result.getDeckProgress().size());
+        assertEquals(2, result.getDeckProgress().get(0).getTotalCount());
+        assertEquals(1, result.getDeckProgress().get(0).getCompletedCount());
+        assertEquals(1, result.getDeckProgress().get(1).getTotalCount());
+        assertEquals(0, result.getDeckProgress().get(1).getCompletedCount());
+    }
+
     private Flashcard newCard() {
         Flashcard card = new Flashcard();
         card.setId(10L);
@@ -81,6 +134,31 @@ class PlanServiceImplFsrsTest {
     private Deck ownedDeck() {
         Deck deck = new Deck();
         deck.setId(20L);
+        deck.setUserId(7L);
+        return deck;
+    }
+
+    private DailyPlanItem planItem(Long cardId, String status) {
+        DailyPlanItem item = new DailyPlanItem();
+        item.setPlanId(100L);
+        item.setCardId(cardId);
+        item.setStatus(status);
+        return item;
+    }
+
+    private Flashcard planCard(Long id, Long deckId) {
+        Flashcard card = new Flashcard();
+        card.setId(id);
+        card.setDeckId(deckId);
+        card.setMemoryScore(35);
+        card.setReviewCount(0);
+        return card;
+    }
+
+    private Deck deck(Long id, String title) {
+        Deck deck = new Deck();
+        deck.setId(id);
+        deck.setTitle(title);
         deck.setUserId(7L);
         return deck;
     }

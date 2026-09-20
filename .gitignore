@@ -45,3 +45,6 @@ replay_pid*
 # PrepDot 本地运行文件
 .run/
 logs/
+
+# Production deployment secrets
+.env.production

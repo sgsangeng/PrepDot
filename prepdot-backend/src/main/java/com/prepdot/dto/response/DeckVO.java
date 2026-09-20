@@ -21,6 +21,9 @@ public class DeckVO {
     /** 已复习过至少一次的卡片数 */
     private Integer reviewedCount;
 
+    /** 当前节点及其子节点中已到期的卡片数 */
+    private Integer dueCount;
+
     /** 平均记忆度 0-100 */
     private Integer avgMemoryScore;
 

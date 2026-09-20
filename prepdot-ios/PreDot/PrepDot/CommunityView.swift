@@ -27,6 +27,8 @@ struct CommunityCardItem: Decodable {
 
 // MARK: - 社区主页
 struct CommunityView: View {
+    var onImported: () -> Void = {}
+
     @State private var packs: [CommunityPack] = []
     @State private var loading = true
     @State private var selectedPack: CommunityPack?
@@ -68,8 +70,11 @@ struct CommunityView: View {
             .navigationTitle("精选卡包")
             .task { await loadPacks() }
             .sheet(item: $selectedPack) { pack in
-                PackDetailSheet(pack: pack) { msg in
+                PackDetailSheet(pack: pack) { succeeded, msg in
                     selectedPack = nil
+                    if succeeded {
+                        onImported()
+                    }
                     toastMsg = msg
                     showToast = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
@@ -210,7 +215,7 @@ struct PackRowView: View {
 // MARK: - 卡包详情 Sheet
 struct PackDetailSheet: View {
     let pack: CommunityPack
-    let onImport: (String) -> Void
+    let onImport: (Bool, String) -> Void
 
     @State private var detail: CommunityPackDetail?
     @State private var loading = true
@@ -303,9 +308,9 @@ struct PackDetailSheet: View {
             do {
                 try await APIService.shared.importCommunityPack(id: pack.id)
                 imported = true
-                onImport("✅ 「\(pack.title)」已导入卡组")
+                onImport(true, "✅ 「\(pack.title)」已导入卡组")
             } catch {
-                onImport("❌ 导入失败，请重试")
+                onImport(false, "❌ 导入失败，请重试")
             }
             importing = false
         }

@@ -4,6 +4,7 @@ import com.prepdot.agent.AgentOrchestrator;
 import com.prepdot.dto.response.AgentRunVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import java.util.function.Consumer;
 
 @Service
 @RequiredArgsConstructor
@@ -29,10 +30,15 @@ public class LearningCoachService {
     private final AgentOrchestrator orchestrator;
 
     public AgentRunVO coach(String message, String mode, Long userId, String apiKey) {
+        return coach(message, mode, userId, apiKey, ignored -> {});
+    }
+
+    public AgentRunVO coach(String message, String mode, Long userId, String apiKey,
+                            Consumer<String> onProgress) {
         if ("CARD_QA".equalsIgnoreCase(mode)) {
-            return orchestrator.run("CARD_QA", CARD_QA_PROMPT, message, userId, apiKey, false);
+            return orchestrator.run("CARD_QA", CARD_QA_PROMPT, message, userId, apiKey, false, onProgress);
         }
-        return orchestrator.run("LEARNING_COACH", DIAGNOSIS_PROMPT, message, userId, apiKey);
+        return orchestrator.run("LEARNING_COACH", DIAGNOSIS_PROMPT, message, userId, apiKey, true, onProgress);
     }
 
     public AgentRunVO getRun(Long runId, Long userId) {

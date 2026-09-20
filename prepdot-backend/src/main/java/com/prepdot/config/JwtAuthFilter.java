@@ -26,6 +26,7 @@ public class JwtAuthFilter extends HttpFilter {
 
     /** 不用查证就能进的路径 */
     private static final List<String> WHITELIST = List.of(
+            "/api/health",
             "/api/auth/login",
             "/api/auth/register"
     );

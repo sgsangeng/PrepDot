@@ -1,0 +1,4 @@
+api.prepdot.site {
+    encode zstd gzip
+    reverse_proxy prepdot-backend:8080
+}

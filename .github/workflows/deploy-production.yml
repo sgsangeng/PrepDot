@@ -1,0 +1,78 @@
+name: Deploy production backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "prepdot-backend/**"
+      - "docker-compose.production.yml"
+      - ".github/workflows/deploy-production.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: prepdot-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          cache-dependency-path: prepdot-backend/pom.xml
+
+      - name: Test backend
+        working-directory: prepdot-backend
+        run: mvn -B test
+
+      - name: Configure SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.PREPDOT_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PREPDOT_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/prepdot_deploy
+          chmod 600 ~/.ssh/prepdot_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload source without production secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.PREPDOT_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.PREPDOT_DEPLOY_USER }}
+        run: |
+          rsync -az --delete \
+            --exclude 'src/main/resources/application.yml' \
+            --exclude 'target/' \
+            -e 'ssh -i ~/.ssh/prepdot_deploy' \
+            ./prepdot-backend/ "$DEPLOY_USER@$DEPLOY_HOST:/opt/prepdot/prepdot-backend/"
+          rsync -az \
+            -e 'ssh -i ~/.ssh/prepdot_deploy' \
+            ./docker-compose.production.yml "$DEPLOY_USER@$DEPLOY_HOST:/opt/prepdot/docker-compose.production.yml"
+
+      - name: Build, start, and verify
+        env:
+          DEPLOY_HOST: ${{ secrets.PREPDOT_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.PREPDOT_DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/prepdot_deploy "$DEPLOY_USER@$DEPLOY_HOST" '
+            set -eu
+            cd /opt/prepdot
+            docker network inspect prepdot_proxy >/dev/null
+            docker compose --project-name prepdot --env-file .env.production -f docker-compose.production.yml up -d --build --remove-orphans
+            for attempt in $(seq 1 24); do
+              if docker inspect --format="{{.State.Health.Status}}" prepdot-backend 2>/dev/null | grep -qx healthy; then
+                exit 0
+              fi
+              sleep 5
+            done
+            docker compose --project-name prepdot --env-file .env.production -f docker-compose.production.yml ps
+            docker logs --tail 120 prepdot-backend
+            exit 1
+          '
