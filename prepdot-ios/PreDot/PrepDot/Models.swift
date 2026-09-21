@@ -199,26 +199,6 @@ struct MemoryDistribution: Decodable {
     let high: Int
 }
 
-// MARK: - 知识图谱
-struct KnowledgeGraphData: Decodable {
-    let nodes: [GraphNode]
-    let edges: [GraphEdge]
-}
-struct GraphNode: Decodable, Identifiable {
-    let id: String
-    let label: String
-    let deckId: Int
-    let deckTitle: String
-    let isCore: Bool
-    let memoryScore: Int    // 记忆度 0-100，用于节点颜色
-    let reviewCount: Int    // 复习次数，用于节点大小
-}
-struct GraphEdge: Decodable {
-    let source: String
-    let target: String
-    let label: String
-}
-
 // MARK: - AI 学习教练（Agent）
 
 struct CoachRequest: Encodable {

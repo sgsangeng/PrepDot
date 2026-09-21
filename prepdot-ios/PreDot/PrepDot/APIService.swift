@@ -199,11 +199,6 @@ class APIService {
         return all.filter { $0.parentId == parentId }
     }
 
-    func fetchKnowledgeGraph(customKey: String = "") async throws -> KnowledgeGraphData {
-        let path = customKey.isEmpty ? "/ai/knowledge-graph" : "/ai/knowledge-graph?customKey=\(customKey)"
-        return try await get(path)
-    }
-
     // MARK: - 카片 CRUD
     func createCard(deckId: Int, question: String, answer: String,
                     cardType: String = "qa", options: String? = nil) async throws -> Flashcard {
