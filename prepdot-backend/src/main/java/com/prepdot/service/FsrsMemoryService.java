@@ -13,9 +13,12 @@ import java.time.LocalDateTime;
 public class FsrsMemoryService {
     private final FsrsScheduler scheduler;
 
+    /** 尚未复习的新卡没有 FSRS 状态，展示固定初始记忆度 */
+    private static final int NEW_CARD_SCORE = 35;
+
     public int currentScore(Flashcard card, LocalDateTime now) {
         if (card.getDifficulty() == null || card.getStability() == null || card.getLastReviewedAt() == null) {
-            return card.getMemoryScore() == null ? 35 : card.getMemoryScore();
+            return NEW_CARD_SCORE;
         }
         double elapsedDays = elapsedDays(card.getLastReviewedAt(), now);
         return (int) Math.round(100 * scheduler.retrievability(card.getStability(), elapsedDays));

@@ -11,7 +11,10 @@
         JOIN deck d ON f.deck_id = d.id
         WHERE f.next_review_at &lt;= NOW()
           AND (#{userId} IS NULL OR d.user_id = #{userId})
-        ORDER BY f.memory_score ASC, f.next_review_at ASC
+        ORDER BY CASE WHEN f.stability IS NULL OR f.last_reviewed_at IS NULL THEN 999999
+                      ELSE (TIMESTAMPDIFF(MINUTE, f.last_reviewed_at, NOW()) / 1440.0) / f.stability
+                 END DESC,
+                 f.next_review_at ASC
         LIMIT #{limit}
     </select>
 
@@ -22,7 +25,10 @@
         JOIN deck d ON f.deck_id = d.id
         WHERE f.next_review_at &lt;= NOW()
           AND (#{userId} IS NULL OR d.user_id = #{userId})
-        ORDER BY f.memory_score ASC, f.next_review_at ASC
+        ORDER BY CASE WHEN f.stability IS NULL OR f.last_reviewed_at IS NULL THEN 999999
+                      ELSE (TIMESTAMPDIFF(MINUTE, f.last_reviewed_at, NOW()) / 1440.0) / f.stability
+                 END DESC,
+                 f.next_review_at ASC
     </select>
 
 </mapper>

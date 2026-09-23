@@ -27,12 +27,21 @@ public class DeckController {
     private final DeckService deckService;
     private final DeckMapper  deckMapper;
 
-    /** 校验卡组归属，不属于当前用户则抛异常（userId==null 的老数据视为公共数据，放行） */
+    /** 写操作校验：公共卡组（user_id NULL）为只读目录，任何用户都不可写 */
     private void checkOwner(Long deckId, Long userId) {
         Deck deck = deckMapper.selectById(deckId);
         if (deck == null) throw BusinessException.notFound("卡组不存在");
-        if (deck.getUserId() != null && !deck.getUserId().equals(userId)) {
+        if (deck.getUserId() == null || !deck.getUserId().equals(userId)) {
             throw BusinessException.forbidden("无权操作该卡组");
+        }
+    }
+
+    /** 读操作校验：公共卡组（user_id NULL）对所有登录用户可见但只读 */
+    private void checkReadable(Long deckId, Long userId) {
+        Deck deck = deckMapper.selectById(deckId);
+        if (deck == null) throw BusinessException.notFound("卡组不存在");
+        if (deck.getUserId() != null && !deck.getUserId().equals(userId)) {
+            throw BusinessException.forbidden("无权访问该卡组");
         }
     }
 
@@ -74,7 +83,7 @@ public class DeckController {
     @GetMapping("/{id}/cards")
     public Result<List<Flashcard>> listCards(@PathVariable Long id,
                                              @RequestParam(required = false, defaultValue = "false") boolean deep) {
-        checkOwner(id, UserContext.getUserId());
+        checkReadable(id, UserContext.getUserId());
         return Result.success(deep
                 ? deckService.listCardsDeep(id, UserContext.getUserId())
                 : deckService.listCards(id));

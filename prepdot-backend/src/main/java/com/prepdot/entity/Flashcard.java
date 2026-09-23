@@ -26,7 +26,8 @@ public class Flashcard {
 
     private String category;
 
-    /** 记忆度 0-100 */
+    /** 记忆度 0-100：由 FSRS 实时计算的展示值，不入库 */
+    @TableField(exist = false)
     private Integer memoryScore;
 
     /** FSRS 难度 1-10，尚未复习时为空 */

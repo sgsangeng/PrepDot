@@ -9,6 +9,7 @@ import com.prepdot.dto.request.DeleteAccountRequest;
 import com.prepdot.entity.User;
 import com.prepdot.mapper.DeckMapper;
 import com.prepdot.mapper.FlashcardMapper;
+import com.prepdot.mapper.ReviewRecordMapper;
 import com.prepdot.mapper.UserMapper;
 import com.prepdot.util.JwtUtil;
 import com.prepdot.service.FsrsMemoryService;
@@ -35,6 +36,7 @@ public class AuthController {
     private final UserMapper      userMapper;
     private final DeckMapper      deckMapper;
     private final FlashcardMapper flashcardMapper;
+    private final ReviewRecordMapper reviewRecordMapper;
     private final JwtUtil         jwtUtil;
     private final FsrsMemoryService fsrsMemoryService;
     private final AccountService accountService;
@@ -189,14 +191,28 @@ public class AuthController {
         return vo;
     }
 
-    /** 计算连续打卡天数（按用户） */
+    /** 连续打卡天数：从今天（今天未复习则从昨天）往前数连续有复习记录的天数 */
     private int calcStreak(Long userId) {
-        try {
-            var dates = userMapper.weeklyStats(userId).stream()
-                .map(m -> m.get("day").toString()).toList();
-            return userMapper.todayReviewCount(userId) > 0 ? Math.max(1, dates.size()) : 0;
-        } catch (Exception e) {
+        List<java.time.LocalDate> dates = reviewRecordMapper.selectReviewDates(userId);
+        if (dates.isEmpty()) {
             return 0;
         }
+        java.time.LocalDate cursor = java.time.LocalDate.now();
+        if (!dates.get(0).equals(cursor)) {
+            cursor = cursor.minusDays(1);
+            if (!dates.get(0).equals(cursor)) {
+                return 0;
+            }
+        }
+        int streak = 0;
+        for (java.time.LocalDate day : dates) {
+            if (day.equals(cursor)) {
+                streak++;
+                cursor = cursor.minusDays(1);
+            } else {
+                break;
+            }
+        }
+        return streak;
     }
 }

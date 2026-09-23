@@ -97,7 +97,6 @@ public class DeckServiceImpl implements DeckService {
                 card.setQuestion(cr.getQuestion());
                 card.setAnswer(cr.getAnswer());
                 card.setCategory(cr.getCategory() != null ? cr.getCategory() : deck.getCategory());
-                card.setMemoryScore(35);
                 card.setReviewCount(0);
                 card.setNextReviewAt(LocalDateTime.now());
                 flashcardMapper.insert(card);
@@ -180,7 +179,6 @@ public class DeckServiceImpl implements DeckService {
             card.setQuestion(q);
             card.setAnswer(a);
             card.setCategory(deck.getCategory());
-            card.setMemoryScore(35);
             card.setReviewCount(0);
             card.setNextReviewAt(LocalDateTime.now());
             flashcardMapper.insert(card);
