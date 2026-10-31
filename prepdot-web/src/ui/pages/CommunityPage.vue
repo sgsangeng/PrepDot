@@ -20,6 +20,16 @@ const CATEGORY_COLORS: Record<string, string> = {
   算法: 'var(--color-indigo)'
 }
 
+/** 胶囊文字使用同色系的深/浅文字 token，品牌色仍用于图标底色。 */
+const CATEGORY_TEXT_COLORS: Record<string, string> = {
+  Java: 'var(--color-orange-text)',
+  Spring: 'var(--color-green-text)',
+  数据库: 'var(--color-blue-text)',
+  网络: 'var(--color-purple-text)',
+  缓存: 'var(--color-red-text)',
+  算法: 'var(--color-indigo-text)'
+}
+
 const CATEGORY_EMOJIS: Record<string, string> = {
   Java: '☕️',
   Spring: '🌱',
@@ -41,6 +51,10 @@ let loadSeq = 0
 
 function categoryColor(category: string): string {
   return CATEGORY_COLORS[category] ?? 'var(--color-indigo)'
+}
+
+function categoryTextColor(category: string): string {
+  return CATEGORY_TEXT_COLORS[category] ?? 'var(--color-indigo-text)'
 }
 
 function categoryEmoji(category: string): string {
@@ -168,7 +182,10 @@ onMounted(() => {
           <button
             class="pack-row"
             type="button"
-            :style="{ '--pack-color': categoryColor(pack.category) }"
+            :style="{
+              '--pack-color': categoryColor(pack.category),
+              '--pack-text': categoryTextColor(pack.category)
+            }"
             @click="openPack(pack, $event)"
           >
             <span
@@ -368,7 +385,7 @@ onMounted(() => {
   padding: 3px 8px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--pack-color) 15%, transparent);
-  color: var(--pack-color);
+  color: var(--pack-text);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.4;

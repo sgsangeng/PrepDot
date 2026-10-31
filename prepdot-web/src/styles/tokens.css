@@ -20,6 +20,15 @@
   --color-green-text: #065f46;
   --color-teal-text: #115e59;
   --color-blue-text: #1d4ed8;
+  /*
+   * 饱和填充色：白字按钮/圆形字母的底色。相对品牌色略深，
+   * 保证白字 ≥4.5:1，同时与浅色/暗色背景仍保持 ≥3:1 的控件边界。
+   * 同一取值在两种主题下均满足要求。
+   */
+  --color-red-fill: #dc2626;
+  --color-green-fill: #047857;
+  /* 中性实心填充：白字字母/圆形标记的底色，白字 ≥5.5:1 且与两种背景 ≥3:1。 */
+  --color-neutral-fill: #70608f;
   /* 暗色模式下图表/散点的深色端需要更亮的色值，避免与深色背景融在一起。 */
   --color-chart-start: var(--color-indigo);
   --color-mastery-end: var(--color-indigo);

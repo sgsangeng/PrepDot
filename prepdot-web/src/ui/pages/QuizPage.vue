@@ -553,7 +553,7 @@ watch(
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--text-tertiary);
+  background: var(--color-neutral-fill);
   color: var(--on-primary);
   font-size: 13px;
   font-weight: 700;
@@ -564,11 +564,11 @@ watch(
 }
 
 .correct .option-letter {
-  background: var(--color-green);
+  background: var(--color-green-fill);
 }
 
 .wrong .option-letter {
-  background: var(--color-red);
+  background: var(--color-red-fill);
 }
 
 .option-text {

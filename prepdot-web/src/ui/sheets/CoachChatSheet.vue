@@ -320,7 +320,7 @@ onUnmounted(() => {
 }
 
 .quick-arrow {
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-weight: 700;
 }
 
