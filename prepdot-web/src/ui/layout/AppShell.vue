@@ -22,7 +22,7 @@ const titles: Record<string, string> = {
   profile: '我的',
   reminder: '每日提醒',
   'delete-account': '注销账号',
-  graph: '知识树',
+  graph: '掌握度地图',
   generate: 'AI 生成',
   community: '精选卡包'
 }
