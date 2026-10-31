@@ -1,11 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { advanceReview, isReviewComplete, parseCardOptions, ratingOptions } from '../session'
+import {
+  advanceAfterRating,
+  advanceReview,
+  isReviewComplete,
+  parseCardOptions,
+  ratingOptions
+} from '../session'
 
 describe('review session', () => {
   it('advances until the last card', () => {
     expect(advanceReview(0, 3)).toEqual({ index: 1, done: false })
     expect(advanceReview(2, 3)).toEqual({ index: 2, done: true })
     expect(advanceReview(0, 1)).toEqual({ index: 0, done: true })
+  })
+
+  it('reloads the plan instead of finishing when again empties the local queue', () => {
+    expect(advanceAfterRating(2, 3, 'again')).toEqual({ index: 2, done: true, reload: true })
+    expect(advanceAfterRating(0, 1, 'again')).toEqual({ index: 0, done: true, reload: true })
+    // 中间卡片保持 iOS 流程：直接切到下一张，不触发刷新。
+    expect(advanceAfterRating(0, 3, 'again')).toEqual({ index: 1, done: false, reload: false })
+    // 其它评分清空队列时仍直接进入完成页。
+    expect(advanceAfterRating(2, 3, 'good')).toEqual({ index: 2, done: true, reload: false })
   })
 
   it('exposes four ratings in iOS order', () => {

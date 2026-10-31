@@ -25,6 +25,25 @@ export function advanceReview(index: number, total: number): AdvanceResult {
   return next >= total ? { index, done: true } : { index: next, done: false }
 }
 
+export interface RatingAdvance extends AdvanceResult {
+  /**
+   * 本地队列已清空，但服务器仍可能把这张卡留在当日计划里：
+   * `again` 会把卡片置为立即到期并回置 pending，必须重新拉取计划后再决定是否完成。
+   */
+  reload: boolean
+}
+
+/** 评分后的页面决策：普通推进，或（again 清空队列时）先重新拉取今日计划。 */
+export function advanceAfterRating(
+  index: number,
+  total: number,
+  rating: ReviewRating
+): RatingAdvance {
+  const next = advanceReview(index, total)
+  if (!next.done) return { ...next, reload: false }
+  return { ...next, reload: rating === 'again' }
+}
+
 /**
  * 今日计划已完成：今天原本有到期卡片，但队列已经清空。
  * 今日没有卡片（totalCount === 0）属于空状态，不算“完成”。

@@ -26,7 +26,7 @@ import { friendlyError } from '@/core/errors'
 import { renderInlineMarkdown } from '@/core/format/markdown'
 import { cardDisplayText, normalizeCardType } from '@/core/format/text'
 import {
-  advanceReview,
+  advanceAfterRating,
   isReviewComplete,
   parseCardOptions,
   ratingOptions,
@@ -60,6 +60,8 @@ const submitMessage = computed(() =>
   `${submitError.value.replace(/[.。]\s*$/, '')}。本次评分未记录，请重试。`
 )
 const lastRating = ref<ReviewRating | null>(null)
+/** `again` 已记录但计划刷新失败：评分按钮保持禁用，避免重复提交同一张卡。 */
+const queueError = ref('')
 
 const showChat = ref(false)
 const showEdit = ref(false)
@@ -114,6 +116,7 @@ async function loadPlan(): Promise<void> {
   try {
     const loaded = await getRuntime().endpoints.todayPlan()
     plan.value = loaded
+    queueError.value = ''
     if (isReviewComplete(loaded)) {
       mode.value = 'done'
       void loadSummary()
@@ -144,6 +147,7 @@ function startSession(): void {
   index.value = 0
   flipped.value = false
   submitError.value = ''
+  queueError.value = ''
   lastRating.value = null
   mode.value = 'session'
 }
@@ -154,26 +158,64 @@ function toggleFlip(): void {
 
 async function submitRating(rating: ReviewRating): Promise<void> {
   const card = currentCard.value
-  if (!card || submitting.value) return
+  if (!card || submitting.value || queueError.value) return
   submitting.value = true
   submitError.value = ''
   lastRating.value = rating
   try {
     await getRuntime().endpoints.submitReview(card.id, rating)
-    const result = advanceReview(index.value, cards.value.length)
-    if (result.done) {
-      mode.value = 'done'
-      void loadSummary()
-    } else {
+    const result = advanceAfterRating(index.value, cards.value.length, rating)
+    if (!result.done) {
       index.value = result.index
       flipped.value = false
       showChat.value = false
       showEdit.value = false
       showNote.value = false
+    } else if (result.reload) {
+      // again 会把服务器计划项回置 pending；先确认服务器队列，避免误报「今日复习完成」。
+      await refreshRemainingQueue()
+    } else {
+      mode.value = 'done'
+      void loadSummary()
     }
     lastRating.value = null
   } catch (e) {
     submitError.value = friendlyError(e)
+  } finally {
+    submitting.value = false
+  }
+}
+
+/**
+ * again 清空本地队列后重新拉取今日计划。
+ * 服务器还有卡片就继续复习（从新队列第一张开始），确实为空才进入完成页。
+ */
+async function refreshRemainingQueue(): Promise<void> {
+  try {
+    const fresh = await getRuntime().endpoints.todayPlan()
+    queueError.value = ''
+    plan.value = fresh
+    if (fresh.cards.length > 0) {
+      index.value = 0
+      flipped.value = false
+      showChat.value = false
+      showEdit.value = false
+      showNote.value = false
+      mode.value = 'session'
+    } else {
+      mode.value = 'done'
+      void loadSummary()
+    }
+  } catch (e) {
+    queueError.value = `评分已记录，但今日计划刷新失败：${friendlyError(e)}`
+  }
+}
+
+async function retryRemainingQueue(): Promise<void> {
+  if (submitting.value) return
+  submitting.value = true
+  try {
+    await refreshRemainingQueue()
   } finally {
     submitting.value = false
   }
@@ -189,6 +231,7 @@ function exitSession(): void {
   index.value = 0
   flipped.value = false
   submitError.value = ''
+  queueError.value = ''
   void loadPlan()
 }
 
@@ -425,11 +468,27 @@ onMounted(loadPlan)
             class="rating"
             :class="`rating-${option.rating}`"
             type="button"
-            :disabled="submitting"
+            :disabled="submitting || queueError !== ''"
             @click="submitRating(option.rating)"
           >
             <span class="rating-label">{{ option.label }}</span>
             <span class="rating-sub">{{ option.sub }}</span>
+          </button>
+        </div>
+
+        <div
+          v-if="queueError"
+          class="submit-error"
+          role="alert"
+        >
+          <span>{{ queueError }}</span>
+          <button
+            class="btn btn-ghost btn-sm"
+            type="button"
+            :disabled="submitting"
+            @click="retryRemainingQueue"
+          >
+            重试
           </button>
         </div>
 
