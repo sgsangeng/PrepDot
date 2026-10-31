@@ -1237,7 +1237,7 @@ import type { Clock, HttpTransport, StoragePort } from '@/adapters/types'
 import type { AuthUser } from '@/core/api/types'
 import { ApiError } from '@/core/errors'
 import { ApiClient, type TokenProvider } from '@/core/api/client'
-import { shouldRefresh } from '@/core/auth/token'
+import { expiresAt, shouldRefresh } from '@/core/auth/token'
 
 const TOKEN_KEY = 'prepdot.token'
 const USER_KEY = 'prepdot.user'
@@ -1260,9 +1260,19 @@ export class AuthSession implements TokenProvider {
     this.token = await this.storage.get(TOKEN_KEY)
     const raw = await this.storage.get(USER_KEY)
     this.user = raw ? JSON.parse(raw) as AuthUser : null
-    if (!this.token) return null
-    if (shouldRefresh(this.token, this.clock.now())) {
-      try { await this.refresh() } catch { await this.logout() }
+    const token = this.token
+    if (!token) { this.user = null; return null }
+    const now = this.clock.now()
+    if (shouldRefresh(token, now)) {
+      try {
+        await this.refresh()
+      } catch (error) {
+        // 只有明确的认证失败或 token 已过期才登出；离线/5xx 保留缓存会话。
+        if ((error instanceof ApiError && error.code === 401) || expiresAt(token, now) <= now) {
+          await this.logout()
+          return null
+        }
+      }
     }
     return this.user
   }
@@ -2182,7 +2192,7 @@ git commit -m "feat(web): 复刻 AI 学习教练流式对话与历史会话"
 - Reuse: `BarChart.vue`
 
 **Interfaces:**
-- Produces: `last7Days(data, nowMs, timeZone?)`。
+- Produces: `last7Days(data, nowMs, timeZone?)`；输入 `day` 兼容后端实际格式 `MM-DD`，输出统一为 `YYYY-MM-DD`。
 - Produces: `useAuthStore` 的 `user` 提供 `studyTarget`、`avatarColor`。
 
 - [ ] **Step 1: 写近 7 天测试**
@@ -2194,7 +2204,8 @@ import { last7Days } from '../week'
 describe('last7Days', () => {
   it('fills missing days and labels them', () => {
     const now = Date.UTC(2026, 9, 31, 4, 0)
-    const rows = last7Days([{ day: '2026-10-31', count: 5 }, { day: '2026-10-29', count: 2 }], now)
+    // 后端 UserStatsVO.weeklyData 实际返回 "MM-DD"
+    const rows = last7Days([{ day: '10-31', count: 5 }, { day: '10-29', count: 2 }], now)
     expect(rows).toHaveLength(7)
     expect(rows.at(-1)).toEqual({ day: '2026-10-31', label: '10/31', count: 5 })
     expect(rows.find(r => r.day === '2026-10-30')?.count).toBe(0)
@@ -2209,7 +2220,7 @@ Expected: FAIL。
 
 - [ ] **Step 3: 实现 week.ts**
 
-用 `Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', ... })` 生成每天 `YYYY-MM-DD`；从 6 天前到今天；标签 `MM/DD`；缺失计数补 0。
+用 `Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', ... })` 生成每天 `YYYY-MM-DD`；从 6 天前到今天；标签 `MM/DD`；缺失计数补 0。输入 key 取 `day.slice(-5)`（即 `MM-DD`）匹配，避免跨年时推断年份出错；输出保留生成的完整 `YYYY-MM-DD`。
 
 - [ ] **Step 4: 实现 ProfilePage**
 
