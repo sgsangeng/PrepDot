@@ -101,7 +101,14 @@ function toggle(id: number): void {
       >稳定性 ↑</text>
     </g>
 
-    <!-- 节点：可见圆保持 14/22px，透明命中圆保证 ≥44px 触控目标 -->
+    <!--
+      节点：可见圆保持 14/22px（viewBox 半径 7/11）。
+      透明命中圆的 r 也是 viewBox 单位，会随 SVG 一起缩放，因此按最窄手机视口
+      反算：320px 视口下的可用宽度约 278px（320 − .map-page 左右 32 −
+      .chart-area 左右 8 − .plot-card 边框 2），缩放比 278/400 ≈ 0.695；
+      r=32 对应直径 64 单位 × 0.695 ≈ 44.5 CSS px，满足 ≥44px 触控目标。
+      更宽视口只会放大命中区。相邻点热区可能重叠，按 DOM 顺序由后绘制的节点接管。
+    -->
     <g
       v-for="point in points"
       :key="point.card.id"
@@ -119,7 +126,7 @@ function toggle(id: number): void {
         class="hit"
         :cx="point.x"
         :cy="point.y"
-        r="22"
+        r="32"
         fill="transparent"
       />
       <circle
