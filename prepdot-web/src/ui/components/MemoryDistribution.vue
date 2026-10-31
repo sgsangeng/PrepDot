@@ -94,11 +94,11 @@ const summary = computed(() =>
 }
 
 .seg-low {
-  background: color-mix(in srgb, var(--color-pink) 32%, white);
+  background: color-mix(in srgb, var(--color-pink) 32%, var(--on-primary));
 }
 
 .seg-mid {
-  background: color-mix(in srgb, var(--color-purple) 55%, white);
+  background: color-mix(in srgb, var(--color-purple) 55%, var(--on-primary));
 }
 
 .seg-high {

@@ -37,7 +37,7 @@ export function scoreColor(score: number): string {
   const t = clamp01(score / 100)
   // 保留两位小数后再归一，避免 0.1 + 0.2 之类的浮点尾数让输出不稳定。
   const percent = Number((t * 100).toFixed(2))
-  return `color-mix(in srgb, var(--color-pink), var(--color-indigo) ${percent}%)`
+  return `color-mix(in srgb, var(--color-pink), var(--color-mastery-end) ${percent}%)`
 }
 
 /**

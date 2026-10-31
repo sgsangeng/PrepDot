@@ -12,6 +12,7 @@ import LoadingState from '@/ui/components/LoadingState.vue'
 import type { CommunityPack, CommunityPackDetail, Deck } from '@/core/api/types'
 import { friendlyError } from '@/core/errors'
 import { getRuntime } from '@/runtime'
+import { useDialogFocus } from '@/ui/composables/useDialogFocus'
 import { useToastStore } from '@/ui/stores/toast'
 
 const props = defineProps<{ pack: CommunityPack }>()
@@ -64,9 +65,10 @@ function close(): void {
 }
 
 onMounted(() => {
-  panelEl.value?.focus()
   void loadDetail()
 })
+
+useDialogFocus(panelEl, { onClose: close })
 </script>
 
 <template>
@@ -82,7 +84,6 @@ onMounted(() => {
         aria-modal="true"
         aria-labelledby="pack-detail-title"
         tabindex="-1"
-        @keydown.esc="close"
       >
         <header class="sheet-bar">
           <button

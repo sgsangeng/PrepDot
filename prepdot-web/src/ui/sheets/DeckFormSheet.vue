@@ -1,11 +1,12 @@
 <script setup lang="ts">
 /* global HTMLElement */
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { X } from 'lucide-vue-next'
 import type { Deck, DeckPayload } from '@/core/api/types'
 import { buildDeckTree, descendantIds, type DeckNode } from '@/core/decks/tree'
 import { friendlyError } from '@/core/errors'
 import { getRuntime } from '@/runtime'
+import { useDialogFocus } from '@/ui/composables/useDialogFocus'
 
 const props = defineProps<{ deck?: Deck; decks: Deck[] }>()
 const emit = defineEmits<{ saved: [deck: Deck]; close: [] }>()
@@ -94,7 +95,7 @@ async function save(): Promise<void> {
   }
 }
 
-onMounted(() => panelEl.value?.focus())
+useDialogFocus(panelEl, { onClose: close })
 </script>
 
 <template>
@@ -110,7 +111,6 @@ onMounted(() => panelEl.value?.focus())
         aria-modal="true"
         aria-labelledby="deck-form-title"
         tabindex="-1"
-        @keydown.esc="close"
       >
         <header class="sheet-head">
           <h2
@@ -125,7 +125,10 @@ onMounted(() => panelEl.value?.focus())
             aria-label="关闭"
             @click="close"
           >
-            <X :size="20" />
+            <X
+              :size="20"
+              aria-hidden="true"
+            />
           </button>
         </header>
 

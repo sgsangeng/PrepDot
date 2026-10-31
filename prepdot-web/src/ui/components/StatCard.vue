@@ -38,7 +38,7 @@ withDefaults(defineProps<{
   gap: 6px;
   min-width: 0;
   padding: 14px 4px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--stat-color) 8%, transparent);
   text-align: center;
 }

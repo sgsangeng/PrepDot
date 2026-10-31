@@ -70,7 +70,7 @@ function cancel(): void {
 
     <div
       class="warning-card"
-      role="alert"
+      role="note"
     >
       <ShieldAlert
         :size="22"

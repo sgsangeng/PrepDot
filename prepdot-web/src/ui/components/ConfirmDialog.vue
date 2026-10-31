@@ -1,7 +1,8 @@
 <script setup lang="ts">
-/* global HTMLElement, HTMLButtonElement, KeyboardEvent, document */
-import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue'
+/* global HTMLElement, HTMLButtonElement */
+import { computed, ref, useId } from 'vue'
 import { TriangleAlert } from 'lucide-vue-next'
+import { useDialogFocus } from '@/ui/composables/useDialogFocus'
 
 const props = withDefaults(
   defineProps<{
@@ -28,7 +29,6 @@ const titleId = useId()
 const messageId = useId()
 const panel = ref<HTMLElement | null>(null)
 const cancelButton = ref<HTMLButtonElement | null>(null)
-let previouslyFocused: HTMLElement | null = null
 
 const busy = computed(() => props.busy)
 
@@ -40,34 +40,13 @@ function confirm(): void {
   if (!busy.value) emit('confirm')
 }
 
-/** 轻量焦点圈：Tab / Shift+Tab 在对话框内循环，避免焦点逃逸到背景页面。 */
-function trapTab(event: KeyboardEvent): void {
-  const root = panel.value
-  if (!root || event.key !== 'Tab') return
-  const focusable = Array.from(
-    root.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')
-  ).filter(element => element.offsetParent !== null)
-  if (focusable.length === 0) return
-  const first = focusable[0]
-  const last = focusable[focusable.length - 1]
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault()
-    last.focus()
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault()
-    first.focus()
-  }
+/** 打开时优先聚焦取消按钮；按钮不可用时退回面板本身。 */
+function initialFocus(): HTMLElement | null {
+  const button = cancelButton.value
+  return button && !button.disabled ? button : panel.value
 }
 
-onMounted(() => {
-  previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
-  cancelButton.value?.focus()
-})
-
-onBeforeUnmount(() => {
-  // 关闭后把焦点还给触发按钮；若该元素已随列表刷新被移除则不再处理。
-  if (previouslyFocused?.isConnected) previouslyFocused.focus()
-})
+useDialogFocus(panel, { onClose: cancel, initialFocus })
 </script>
 
 <template>
@@ -83,8 +62,7 @@ onBeforeUnmount(() => {
         aria-modal="true"
         :aria-labelledby="titleId"
         :aria-describedby="messageId"
-        @keydown="trapTab"
-        @keydown.esc.prevent="cancel"
+        tabindex="-1"
       >
         <div class="confirm-head">
           <span

@@ -213,7 +213,7 @@ const chartHeight = computed(() =>
 }
 
 .stop-start {
-  stop-color: var(--color-indigo);
+  stop-color: var(--color-chart-start);
 }
 
 .stop-end {

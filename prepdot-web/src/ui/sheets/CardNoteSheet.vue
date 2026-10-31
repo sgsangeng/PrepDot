@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /* global HTMLElement */
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { X } from 'lucide-vue-next'
 import type { Flashcard } from '@/core/api/types'
 import { friendlyError } from '@/core/errors'
 import { getRuntime } from '@/runtime'
+import { useDialogFocus } from '@/ui/composables/useDialogFocus'
 
 const props = defineProps<{ card: Flashcard }>()
 const emit = defineEmits<{ saved: [card: Flashcard]; close: [] }>()
@@ -36,8 +37,7 @@ async function save(): Promise<void> {
   }
 }
 
-onMounted(() => panelEl.value?.focus())
-</script>
+useDialogFocus(panelEl, { onClose: close })</script>
 
 <template>
   <Teleport to="body">
@@ -52,7 +52,6 @@ onMounted(() => panelEl.value?.focus())
         aria-modal="true"
         aria-labelledby="note-title"
         tabindex="-1"
-        @keydown.esc="close"
       >
         <header class="sheet-head">
           <h2
@@ -67,7 +66,10 @@ onMounted(() => panelEl.value?.focus())
             aria-label="关闭"
             @click="close"
           >
-            <X :size="20" />
+            <X
+              :size="20"
+              aria-hidden="true"
+            />
           </button>
         </header>
 

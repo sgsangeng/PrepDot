@@ -263,7 +263,7 @@ onMounted(() => {
   gap: 16px;
   padding: 20px;
   border: 1px solid color-mix(in srgb, var(--color-indigo) 20%, transparent);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: linear-gradient(
     135deg,
     color-mix(in srgb, var(--color-indigo) 15%, transparent),

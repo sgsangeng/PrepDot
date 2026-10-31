@@ -1,12 +1,13 @@
 <script setup lang="ts">
 /* global Event, HTMLInputElement, HTMLElement */
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { Bold, CheckCircle2, Circle, Code, List, ListOrdered, X } from 'lucide-vue-next'
 import type { CardPayload, Flashcard } from '@/core/api/types'
 import { friendlyError } from '@/core/errors'
 import { parseCardOptions } from '@/core/review/session'
 import { normalizeCardType } from '@/core/format/text'
 import { getRuntime } from '@/runtime'
+import { useDialogFocus } from '@/ui/composables/useDialogFocus'
 
 type CardMode = 'qa' | 'choice' | 'blank'
 type EditorField = 'question' | 'answer'
@@ -123,7 +124,7 @@ function close(): void {
   emit('close')
 }
 
-onMounted(() => panelEl.value?.focus())
+useDialogFocus(panelEl, { onClose: close })
 </script>
 
 <template>
@@ -139,7 +140,6 @@ onMounted(() => panelEl.value?.focus())
         aria-modal="true"
         aria-labelledby="form-title"
         tabindex="-1"
-        @keydown.esc="close"
       >
         <header class="sheet-head">
           <h2
@@ -154,7 +154,10 @@ onMounted(() => panelEl.value?.focus())
             aria-label="关闭"
             @click="close"
           >
-            <X :size="20" />
+            <X
+              :size="20"
+              aria-hidden="true"
+            />
           </button>
         </header>
 
@@ -204,7 +207,10 @@ onMounted(() => panelEl.value?.focus())
             title="加粗"
             @click="appendMarkdown('question', '**重点**')"
           >
-            <Bold :size="14" />
+            <Bold
+              :size="14"
+              aria-hidden="true"
+            />
             <span>加粗</span>
           </button>
           <button
@@ -213,7 +219,10 @@ onMounted(() => panelEl.value?.focus())
             title="列表"
             @click="appendMarkdown('question', '- ', true)"
           >
-            <List :size="14" />
+            <List
+              :size="14"
+              aria-hidden="true"
+            />
             <span>列表</span>
           </button>
           <button
@@ -222,7 +231,10 @@ onMounted(() => panelEl.value?.focus())
             title="编号"
             @click="appendMarkdown('question', '1. ', true)"
           >
-            <ListOrdered :size="14" />
+            <ListOrdered
+              :size="14"
+              aria-hidden="true"
+            />
             <span>编号</span>
           </button>
           <button
@@ -231,7 +243,10 @@ onMounted(() => panelEl.value?.focus())
             title="代码"
             @click="appendMarkdown('question', '`代码`')"
           >
-            <Code :size="14" />
+            <Code
+              :size="14"
+              aria-hidden="true"
+            />
             <span>代码</span>
           </button>
         </div>
@@ -254,7 +269,10 @@ onMounted(() => panelEl.value?.focus())
               title="加粗"
               @click="appendMarkdown('answer', '**重点**')"
             >
-              <Bold :size="14" />
+              <Bold
+                :size="14"
+                aria-hidden="true"
+              />
               <span>加粗</span>
             </button>
             <button
@@ -263,7 +281,10 @@ onMounted(() => panelEl.value?.focus())
               title="列表"
               @click="appendMarkdown('answer', '- ', true)"
             >
-              <List :size="14" />
+              <List
+                :size="14"
+                aria-hidden="true"
+              />
               <span>列表</span>
             </button>
             <button
@@ -272,7 +293,10 @@ onMounted(() => panelEl.value?.focus())
               title="编号"
               @click="appendMarkdown('answer', '1. ', true)"
             >
-              <ListOrdered :size="14" />
+              <ListOrdered
+                :size="14"
+                aria-hidden="true"
+              />
               <span>编号</span>
             </button>
             <button
@@ -281,7 +305,10 @@ onMounted(() => panelEl.value?.focus())
               title="代码"
               @click="appendMarkdown('answer', '`代码`')"
             >
-              <Code :size="14" />
+              <Code
+                :size="14"
+                aria-hidden="true"
+              />
               <span>代码</span>
             </button>
           </div>
@@ -305,17 +332,20 @@ onMounted(() => panelEl.value?.focus())
                 v-if="correctIndex === i"
                 :size="20"
                 class="pick-checked"
+                aria-hidden="true"
               />
               <Circle
                 v-else
                 :size="20"
                 class="pick-idle"
+                aria-hidden="true"
               />
             </button>
             <input
               :value="value"
               class="input option-input"
               type="text"
+              :aria-label="`选项 ${['A', 'B', 'C', 'D'][i]}`"
               :placeholder="`选项 ${['A', 'B', 'C（选填）', 'D（选填）'][i]}`"
               @input="onOptionInput(i, $event)"
             >

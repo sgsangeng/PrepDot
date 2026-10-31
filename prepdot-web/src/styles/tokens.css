@@ -8,6 +8,9 @@
   --color-red: #ef4444;
   --color-teal: #14b8a6;
   --color-blue: #3b82f6;
+  /* 暗色模式下图表/散点的深色端需要更亮的色值，避免与深色背景融在一起。 */
+  --color-chart-start: var(--color-indigo);
+  --color-mastery-end: var(--color-indigo);
 
   --bg: #f7f6fc;
   --surface: #ffffff;
@@ -15,7 +18,7 @@
   --surface-muted: #f1eff8;
   --text: #260d59;
   --text-secondary: #6b5a8e;
-  --text-tertiary: #9a8cb5;
+  --text-tertiary: #70608f;
   --border: rgba(38, 13, 89, 0.1);
   --border-strong: rgba(38, 13, 89, 0.18);
 
@@ -52,7 +55,9 @@
     --surface-muted: rgba(255, 255, 255, 0.06);
     --text: #ffffff;
     --text-secondary: rgba(255, 255, 255, 0.66);
-    --text-tertiary: rgba(255, 255, 255, 0.42);
+    --text-tertiary: rgba(255, 255, 255, 0.52);
+    --color-chart-start: #818cf8;
+    --color-mastery-end: #818cf8;
     --border: rgba(255, 255, 255, 0.12);
     --border-strong: rgba(255, 255, 255, 0.2);
     --on-primary: #ffffff;

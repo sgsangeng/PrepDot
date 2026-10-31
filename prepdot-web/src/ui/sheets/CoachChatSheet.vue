@@ -1,12 +1,13 @@
 <script setup lang="ts">
 /* global HTMLElement */
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { nextTick, onUnmounted, ref, watch } from 'vue'
 import { Layers3, Send, X } from 'lucide-vue-next'
 import type { Flashcard } from '@/core/api/types'
 import { toolSummary } from '@/core/coach/tools'
 import { friendlyError } from '@/core/errors'
 import { renderInlineMarkdown } from '@/core/format/markdown'
 import { getRuntime } from '@/runtime'
+import { useDialogFocus } from '@/ui/composables/useDialogFocus'
 
 interface ChatMessage {
   id: number
@@ -76,7 +77,7 @@ watch([() => messages.value.length, thinking], async () => {
   if (el) el.scrollTop = el.scrollHeight
 })
 
-onMounted(() => panelEl.value?.focus())
+useDialogFocus(panelEl, { onClose: close })
 onUnmounted(() => {
   cancelled = true
 })
@@ -96,7 +97,6 @@ onUnmounted(() => {
         aria-modal="true"
         aria-labelledby="coach-title"
         tabindex="-1"
-        @keydown.esc="close"
       >
         <header class="chat-head">
           <h2
@@ -110,7 +110,10 @@ onUnmounted(() => {
             type="button"
             @click="close"
           >
-            <X :size="16" />
+            <X
+              :size="16"
+              aria-hidden="true"
+            />
             <span>关闭</span>
           </button>
         </header>
@@ -119,6 +122,7 @@ onUnmounted(() => {
           <Layers3
             :size="14"
             class="context-icon"
+            aria-hidden="true"
           />
           <span class="context-text">{{ card.question }}</span>
         </div>
@@ -204,7 +208,10 @@ onUnmounted(() => {
             :disabled="thinking || input.trim().length === 0"
             @click="send(input)"
           >
-            <Send :size="20" />
+            <Send
+              :size="20"
+              aria-hidden="true"
+            />
           </button>
         </div>
       </div>

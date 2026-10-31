@@ -451,7 +451,7 @@ onMounted(() => {
 }
 
 .legend-dot.high {
-  background: var(--color-indigo);
+  background: var(--color-mastery-end);
 }
 
 .detail-panel {

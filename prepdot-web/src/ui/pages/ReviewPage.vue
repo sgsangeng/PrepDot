@@ -78,7 +78,7 @@ const pending = computed(() => cards.value.length)
 const progressPercent = computed(() => {
   const p = plan.value
   if (!p || p.totalCount === 0) return 0
-  return Math.min(100, Math.round((p.completedCount / p.totalCount) * 100))
+  return Math.min(100, Math.floor((p.completedCount / p.totalCount) * 100))
 })
 
 const cardType = computed(() => (currentCard.value ? normalizeCardType(currentCard.value.cardType) : 'qa'))
@@ -258,7 +258,10 @@ onMounted(loadPlan)
             type="button"
             @click="exitSession"
           >
-            <X :size="18" />
+            <X
+              :size="18"
+              aria-hidden="true"
+            />
             <span>退出复习</span>
           </button>
           <div class="session-meta">
@@ -355,6 +358,7 @@ onMounted(loadPlan)
                 <StickyNote
                   :size="14"
                   class="note-icon"
+                  aria-hidden="true"
                 />
                 <div
                   class="note-text markdown"
@@ -384,7 +388,10 @@ onMounted(loadPlan)
             type="button"
             @click="showChat = true"
           >
-            <MessageCircle :size="14" />
+            <MessageCircle
+              :size="14"
+              aria-hidden="true"
+            />
             <span>问AI</span>
           </button>
           <button
@@ -392,7 +399,10 @@ onMounted(loadPlan)
             type="button"
             @click="showEdit = true"
           >
-            <Pencil :size="14" />
+            <Pencil
+              :size="14"
+              aria-hidden="true"
+            />
             <span>编辑</span>
           </button>
           <button
@@ -400,7 +410,10 @@ onMounted(loadPlan)
             type="button"
             @click="showNote = true"
           >
-            <StickyNote :size="14" />
+            <StickyNote
+              :size="14"
+              aria-hidden="true"
+            />
             <span>笔记</span>
           </button>
         </div>
@@ -502,6 +515,7 @@ onMounted(loadPlan)
           <Layers3
             :size="16"
             class="summary-icon"
+            aria-hidden="true"
           />
           <span class="summary-deck">{{ deck.deckTitle }}</span>
           <span class="summary-count">{{ deck.count }} 张</span>
@@ -545,7 +559,10 @@ onMounted(loadPlan)
           @click="goToDecks"
         >
           去知识树
-          <ArrowRight :size="18" />
+          <ArrowRight
+            :size="18"
+            aria-hidden="true"
+          />
         </button>
       </EmptyState>
 
@@ -565,6 +582,7 @@ onMounted(loadPlan)
             <CheckCircle2
               :size="20"
               class="stat-icon"
+              aria-hidden="true"
             />
             <span class="stat-value num">{{ plan.completedCount }}/{{ plan.totalCount }}</span>
             <span class="stat-label">今日进度</span>
@@ -573,6 +591,7 @@ onMounted(loadPlan)
             <Clock3
               :size="20"
               class="stat-icon"
+              aria-hidden="true"
             />
             <span class="stat-value">≈{{ plan.estimatedMinutes }} 分钟</span>
             <span class="stat-label">预计时间</span>
@@ -596,11 +615,13 @@ onMounted(loadPlan)
                 v-if="isDeckDone(item)"
                 :size="18"
                 class="deck-icon done"
+                aria-hidden="true"
               />
               <Layers3
                 v-else
                 :size="18"
                 class="deck-icon"
+                aria-hidden="true"
               />
               <span class="deck-title">{{ item.deckTitle }}</span>
               <span
@@ -627,7 +648,10 @@ onMounted(loadPlan)
           @click="startSession"
         >
           <span>{{ plan.completedCount > 0 ? '继续复习' : '开始复习' }}</span>
-          <ArrowRight :size="18" />
+          <ArrowRight
+            :size="18"
+            aria-hidden="true"
+          />
         </button>
       </template>
     </div>
@@ -1087,7 +1111,7 @@ onMounted(loadPlan)
   align-items: flex-start;
   gap: 6px;
   padding: 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-teal) 8%, transparent);
 }
 

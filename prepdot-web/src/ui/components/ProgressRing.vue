@@ -11,7 +11,8 @@ const strokeWidth = 12
 
 const percent = computed(() => {
   const raw = props.percent ?? (props.max > 0 ? (props.value / props.max) * 100 : 0)
-  return Math.min(100, Math.max(0, raw))
+  // 与 iOS 一致向下取整；圆弧和文字使用同一个百分比，避免 0% 时仍画出圆点。
+  return Math.floor(Math.min(100, Math.max(0, raw)))
 })
 const radius = computed(() => (props.size - strokeWidth) / 2)
 const circumference = computed(() => 2 * Math.PI * radius.value)
@@ -23,7 +24,7 @@ const dash = computed(() => (percent.value / 100) * circumference.value)
     class="ring"
     :style="{ width: `${size}px`, height: `${size}px` }"
     role="img"
-    :aria-label="`今日复习进度 ${Math.round(percent)}%`"
+    :aria-label="`今日复习进度 ${percent}%`"
   >
     <svg
       class="ring-svg"
@@ -61,6 +62,7 @@ const dash = computed(() => (percent.value / 100) * circumference.value)
         fill="none"
       />
       <circle
+        v-if="percent > 0"
         class="value"
         :cx="size / 2"
         :cy="size / 2"

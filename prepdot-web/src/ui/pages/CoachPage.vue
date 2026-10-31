@@ -23,6 +23,7 @@ import { renderInlineMarkdown, renderMarkdown } from '@/core/format/markdown'
 import { getRuntime } from '@/runtime'
 import BarChart from '@/ui/components/charts/BarChart.vue'
 import LoadingState from '@/ui/components/LoadingState.vue'
+import { useDialogFocus } from '@/ui/composables/useDialogFocus'
 import { useCoachStore } from '@/ui/stores/coach'
 
 interface BarChartPoint {
@@ -190,37 +191,33 @@ function weakCardPoints(message: CoachMessage): BarChartPoint[] {
     }))
 }
 
-async function openHistory(event: MouseEvent): Promise<void> {
+function openHistory(event: MouseEvent): void {
   if (thinking.value) return
   historyTrigger = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
   historyNow.value = getRuntime().adapters.clock.now()
   historyOpen.value = true
-  await nextTick()
-  historyPanel.value?.focus()
 }
 
-async function closeHistory(): Promise<void> {
-  if (!historyOpen.value) return
+function closeHistory(): void {
   historyOpen.value = false
-  const trigger = historyTrigger
-  historyTrigger = null
-  if (trigger) {
-    await nextTick()
-    trigger.focus()
-  }
 }
+
+useDialogFocus(historyPanel, {
+  onClose: closeHistory,
+  returnFocus: () => historyTrigger
+})
 
 async function startNewSession(): Promise<void> {
   if (thinking.value) return
   await store.newSession()
-  if (historyOpen.value) await closeHistory()
+  if (historyOpen.value) closeHistory()
   await scrollToBottom()
 }
 
 async function switchTo(id: string): Promise<void> {
   if (thinking.value) return
   await store.switchSession(id)
-  await closeHistory()
+  closeHistory()
   await scrollToBottom()
 }
 
@@ -460,7 +457,6 @@ onMounted(() => {
         aria-modal="true"
         aria-labelledby="coach-history-title"
         tabindex="-1"
-        @keydown.esc="closeHistory"
       >
         <header class="sheet-bar">
           <h2
