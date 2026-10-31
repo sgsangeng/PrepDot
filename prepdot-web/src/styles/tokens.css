@@ -1,0 +1,52 @@
+:root {
+  --color-indigo: #4f46e5;
+  --color-indigo-strong: #4338ca;
+  --color-purple: #7c3aed;
+  --color-pink: #d946ef;
+  --color-green: #10b981;
+  --color-orange: #f59e0b;
+  --color-red: #ef4444;
+  --color-teal: #14b8a6;
+
+  --bg: #f7f6fc;
+  --surface: #ffffff;
+  --surface-soft: rgba(255, 255, 255, 0.58);
+  --surface-muted: #f1eff8;
+  --text: #260d59;
+  --text-secondary: #6b5a8e;
+  --text-tertiary: #9a8cb5;
+  --border: rgba(38, 13, 89, 0.1);
+  --border-strong: rgba(38, 13, 89, 0.18);
+
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --shadow-sm: 0 2px 8px rgba(38, 13, 89, 0.06);
+  --shadow-md: 0 4px 16px rgba(38, 13, 89, 0.08);
+  --shadow-lg: 0 12px 32px rgba(38, 13, 89, 0.14);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+  --font-rounded: ui-rounded, "SF Pro Rounded", var(--font-sans);
+
+  --tab-height: 49px;
+  --sidebar-width: 240px;
+  --content-max: 1100px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a0a24;
+    --surface: #141433;
+    --surface-soft: rgba(255, 255, 255, 0.08);
+    --surface-muted: rgba(255, 255, 255, 0.06);
+    --text: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.66);
+    --text-tertiary: rgba(255, 255, 255, 0.42);
+    --border: rgba(255, 255, 255, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.2);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.36);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+}
