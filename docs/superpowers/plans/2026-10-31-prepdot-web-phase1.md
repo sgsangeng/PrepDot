@@ -2432,9 +2432,9 @@ test('profile renders stats', async ({ page }) => {
 
 Run:
 ```bash
-cd prepdot-web && pnpm lint && pnpm build && pnpm e2e
+cd prepdot-web && pnpm lint && pnpm build
 ```
-Expected: 冒烟通过。若 demo 数据尚未部署，先完成 Task 14/15；可在本地用已有测试账号替换 demo 凭证临时验证。
+Expected: 全绿。`pnpm e2e` 依赖 Task 15 的 demo 数据，统一在 Task 16 Step 6 执行；本 Task 只创建配置与用例，不要求通过。
 
 - [ ] **Step 6: 提交**
 
@@ -2854,6 +2854,14 @@ done
 ```
 
 Expected: 全部 200。
+
+运行移动端冒烟测试（demo 数据已就绪）：
+
+```bash
+cd prepdot-web && pnpm e2e
+```
+
+Expected: 2 个用例通过。若失败，先核对 demo 账号密码与今日到期卡片数。
 
 浏览器验证：
 1. 登录 `demo` / `PrepDot2026`。
