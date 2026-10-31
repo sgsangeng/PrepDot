@@ -49,6 +49,9 @@ async function importPack(): Promise<void> {
     emit('imported', deck)
   } catch {
     toast.show('❌ 导入失败，请重试')
+    // 与 iOS 一致：无论成功失败都关闭详情，只由底部 Toast 反馈失败结果。
+    // 这是请求结束后的程序化关闭，直接 emit，不走 close() 的导入中拦截。
+    emit('close')
   } finally {
     importing.value = false
   }
