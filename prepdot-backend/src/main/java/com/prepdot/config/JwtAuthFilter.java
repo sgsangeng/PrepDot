@@ -50,6 +50,12 @@ public class JwtAuthFilter extends HttpFilter {
 
         String uri = req.getRequestURI();
 
+        // 浏览器 CORS 预检不携带 Authorization；预检只做跨域协商，不执行业务。
+        if ("OPTIONS".equalsIgnoreCase(req.getMethod())) {
+            chain.doFilter(req, resp);
+            return;
+        }
+
         if (isWhitelisted(uri)) {
             chain.doFilter(req, resp);
             return;
