@@ -4,15 +4,14 @@ export interface RatingOption {
   rating: ReviewRating
   label: string
   sub: string
-  color: 'red' | 'orange' | 'green' | 'indigo'
 }
 
 /** 与 iOS `RatingButtons` 保持相同的顺序与文案。 */
 export const ratingOptions: readonly RatingOption[] = [
-  { rating: 'again', label: 'Again', sub: '重新学', color: 'red' },
-  { rating: 'hard', label: 'Hard', sub: '明天', color: 'orange' },
-  { rating: 'good', label: 'Good', sub: '2–4 天', color: 'green' },
-  { rating: 'easy', label: 'Easy', sub: '5–10 天', color: 'indigo' }
+  { rating: 'again', label: 'Again', sub: '重新学' },
+  { rating: 'hard', label: 'Hard', sub: '明天' },
+  { rating: 'good', label: 'Good', sub: '2–4 天' },
+  { rating: 'easy', label: 'Easy', sub: '5–10 天' }
 ]
 
 export interface AdvanceResult {

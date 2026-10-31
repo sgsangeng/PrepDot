@@ -5,6 +5,7 @@ describe('review session', () => {
   it('advances until the last card', () => {
     expect(advanceReview(0, 3)).toEqual({ index: 1, done: false })
     expect(advanceReview(2, 3)).toEqual({ index: 2, done: true })
+    expect(advanceReview(0, 1)).toEqual({ index: 0, done: true })
   })
 
   it('exposes four ratings in iOS order', () => {
@@ -30,7 +31,7 @@ describe('review session', () => {
     expect(parseCardOptions('A. 旧格式\nB. 仍然是选项')).toEqual(['A. 旧格式\nB. 仍然是选项'])
   })
 
-  it('returns no options when the column is empty or invalid', () => {
+  it('returns no options for empty input and raw text for non-array JSON', () => {
     expect(parseCardOptions(null)).toEqual([])
     expect(parseCardOptions('')).toEqual([])
     expect(parseCardOptions('{"not":"an array"}')).toEqual(['{"not":"an array"}'])

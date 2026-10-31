@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/* global window */
+/* global HTMLElement, MouseEvent */
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -37,6 +37,8 @@ import { getRuntime } from '@/runtime'
 type ScreenMode = 'overview' | 'session' | 'done'
 
 interface DeckProgressLike {
+  deckId: number
+  deckTitle: string
   totalCount: number
   completedCount: number
 }
@@ -54,19 +56,23 @@ const summaryLoading = ref(false)
 const flipped = ref(false)
 const submitting = ref(false)
 const submitError = ref('')
+const submitMessage = computed(() =>
+  `${submitError.value.replace(/[.。]\s*$/, '')}。本次评分未记录，请重试。`
+)
 const lastRating = ref<ReviewRating | null>(null)
 
 const showChat = ref(false)
 const showEdit = ref(false)
 const showNote = ref(false)
 
-const todayLabel = new Intl.DateTimeFormat('zh-CN', {
+const now = new Date()
+const todayLabel = `${new Intl.DateTimeFormat('zh-CN', {
   month: 'long',
-  day: 'numeric',
-  weekday: 'long'
-}).format(new Date())
+  day: 'numeric'
+}).format(now)} ${new Intl.DateTimeFormat('zh-CN', { weekday: 'long' }).format(now)}`
 
 const cards = computed(() => plan.value?.cards ?? [])
+const deckProgress = computed<DeckProgressLike[]>(() => plan.value?.deckProgress ?? [])
 const currentCard = computed<Flashcard | null>(() => cards.value[index.value] ?? null)
 const pending = computed(() => cards.value.length)
 const progressPercent = computed(() => {
@@ -178,12 +184,17 @@ function retrySubmit(): void {
 }
 
 function exitSession(): void {
-  if (!window.confirm('退出复习？本次未提交的评分不会保存。')) return
+  if (submitting.value) return
   mode.value = 'overview'
   index.value = 0
   flipped.value = false
   submitError.value = ''
   void loadPlan()
+}
+
+/** 卡片内的链接只跳转，不再冒泡触发翻转。 */
+function stopLinkFlip(event: MouseEvent): void {
+  if ((event.target as HTMLElement | null)?.closest('a')) event.stopPropagation()
 }
 
 function applyCardUpdate(updated: Flashcard): void {
@@ -272,7 +283,11 @@ onMounted(loadPlan)
         @keydown.space.prevent="toggleFlip"
       >
         <div class="flashcard-inner">
-          <article class="face front">
+          <article
+            class="face front"
+            :aria-hidden="flipped"
+            :inert="flipped"
+          >
             <header class="face-head">
               <span
                 v-if="cardType !== 'qa'"
@@ -284,12 +299,17 @@ onMounted(loadPlan)
             <div class="front-body">
               <div
                 class="question markdown"
+                @click="stopLinkFlip"
                 v-html="questionHtml"
               />
             </div>
           </article>
 
-          <article class="face back">
+          <article
+            class="face back"
+            :aria-hidden="!flipped"
+            :inert="!flipped"
+          >
             <header class="face-head">
               <span
                 v-if="cardType !== 'qa'"
@@ -301,6 +321,7 @@ onMounted(loadPlan)
 
             <div
               class="back-question"
+              @click="stopLinkFlip"
               v-html="questionHtml"
             />
             <hr class="divider">
@@ -308,6 +329,7 @@ onMounted(loadPlan)
             <div class="back-body">
               <div
                 class="answer markdown"
+                @click="stopLinkFlip"
                 v-html="answerHtml"
               />
 
@@ -336,6 +358,7 @@ onMounted(loadPlan)
                 />
                 <div
                   class="note-text markdown"
+                  @click="stopLinkFlip"
                   v-html="noteHtml"
                 />
               </div>
@@ -402,7 +425,7 @@ onMounted(loadPlan)
           class="submit-error"
           role="alert"
         >
-          <span>{{ submitError }}。本次评分未记录，请重试。</span>
+          <span>{{ submitMessage }}</span>
           <button
             class="btn btn-ghost btn-sm"
             type="button"
@@ -557,14 +580,14 @@ onMounted(loadPlan)
         </div>
 
         <div
-          v-if="plan.deckProgress.length"
+          v-if="deckProgress.length"
           class="deck-progress"
         >
           <h2 class="section-title">
             卡组进度
           </h2>
           <div
-            v-for="item in plan.deckProgress"
+            v-for="item in deckProgress"
             :key="item.deckId"
             class="deck-row"
           >

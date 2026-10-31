@@ -1,6 +1,6 @@
 <script setup lang="ts">
-/* global KeyboardEvent, window */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+/* global HTMLElement */
+import { computed, onMounted, ref } from 'vue'
 import { X } from 'lucide-vue-next'
 import type { Flashcard } from '@/core/api/types'
 import { friendlyError } from '@/core/errors'
@@ -12,6 +12,7 @@ const emit = defineEmits<{ saved: [card: Flashcard]; close: [] }>()
 const text = ref(props.card.note ?? '')
 const saving = ref(false)
 const saveError = ref('')
+const panelEl = ref<HTMLElement | null>(null)
 
 const hasText = computed(() => text.value.trim().length > 0)
 
@@ -35,12 +36,7 @@ async function save(): Promise<void> {
   }
 }
 
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') close()
-}
-
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+onMounted(() => panelEl.value?.focus())
 </script>
 
 <template>
@@ -50,10 +46,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       @click.self="close"
     >
       <div
+        ref="panelEl"
         class="sheet-panel note-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="note-title"
+        tabindex="-1"
+        @keydown.esc="close"
       >
         <header class="sheet-head">
           <h2
@@ -133,6 +132,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   gap: 12px;
 }
 
+.note-panel:focus {
+  outline: none;
+}
+
 .sheet-head {
   display: flex;
   align-items: center;
@@ -163,6 +166,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 }
 
 .link-btn {
+  min-width: 44px;
   min-height: 44px;
   padding: 0;
   border: 0;

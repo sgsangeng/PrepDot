@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/* global HTMLElement, KeyboardEvent, window */
+/* global HTMLElement */
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Layers3, Send, X } from 'lucide-vue-next'
 import type { AgentRun, Flashcard } from '@/core/api/types'
@@ -21,7 +21,9 @@ const messages = ref<ChatMessage[]>([])
 const input = ref('')
 const thinking = ref(false)
 const listEl = ref<HTMLElement | null>(null)
+const panelEl = ref<HTMLElement | null>(null)
 let nextId = 1
+let cancelled = false
 
 const quickQuestions = [
   '帮我讲透这道题',
@@ -63,19 +65,21 @@ async function send(raw: string): Promise<void> {
   thinking.value = true
   try {
     const run = await getRuntime().endpoints.coach(buildPrompt(text), 'CARD_QA')
+    if (cancelled) return
     const output = run.output?.trim()
     const reply = output && output.length > 0
       ? output
       : `教练暂时没有给出有效回复（状态：${run.status}）。`
     messages.value.push({ id: nextId++, role: 'assistant', text: reply, toolNote: toolSummary(run) })
   } catch (e) {
+    if (cancelled) return
     messages.value.push({
       id: nextId++,
       role: 'assistant',
       text: `😥 提问失败：${friendlyError(e)}\n\n请确认后端已配置 AI API Key 后重试。`
     })
   } finally {
-    thinking.value = false
+    if (!cancelled) thinking.value = false
   }
 }
 
@@ -85,12 +89,10 @@ watch([() => messages.value.length, thinking], async () => {
   if (el) el.scrollTop = el.scrollHeight
 })
 
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') close()
-}
-
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+onMounted(() => panelEl.value?.focus())
+onUnmounted(() => {
+  cancelled = true
+})
 </script>
 
 <template>
@@ -101,10 +103,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       @click.self="close"
     >
       <div
+        ref="panelEl"
         class="sheet-panel chat-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="coach-title"
+        tabindex="-1"
+        @keydown.esc="close"
       >
         <header class="chat-head">
           <h2
@@ -203,7 +208,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             type="text"
             placeholder="输入你的疑问…"
             aria-label="你的问题"
-            :disabled="thinking"
             @keydown.enter.prevent="send(input)"
           >
           <button
@@ -228,6 +232,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   gap: 12px;
   height: min(90vh, 720px);
   overflow: hidden;
+}
+
+.chat-panel:focus {
+  outline: none;
 }
 
 .chat-head {

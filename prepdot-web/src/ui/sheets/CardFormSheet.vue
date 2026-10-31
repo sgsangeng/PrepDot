@@ -1,6 +1,6 @@
 <script setup lang="ts">
-/* global Event, HTMLInputElement, KeyboardEvent, window */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+/* global Event, HTMLInputElement, HTMLElement */
+import { computed, onMounted, ref } from 'vue'
 import { Bold, CheckCircle2, Circle, Code, List, ListOrdered, X } from 'lucide-vue-next'
 import type { CardPayload, Flashcard } from '@/core/api/types'
 import { friendlyError } from '@/core/errors'
@@ -30,6 +30,7 @@ const optionD = ref('')
 const correctIndex = ref(0)
 const saving = ref(false)
 const saveError = ref('')
+const panelEl = ref<HTMLElement | null>(null)
 
 const optionValues = computed(() => [optionA.value, optionB.value, optionC.value, optionD.value])
 const selectedOption = computed(() => optionValues.value[correctIndex.value] ?? '')
@@ -122,12 +123,7 @@ function close(): void {
   emit('close')
 }
 
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') close()
-}
-
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+onMounted(() => panelEl.value?.focus())
 </script>
 
 <template>
@@ -137,10 +133,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       @click.self="close"
     >
       <div
+        ref="panelEl"
         class="sheet-panel form-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="form-title"
+        tabindex="-1"
+        @keydown.esc="close"
       >
         <header class="sheet-head">
           <h2
@@ -372,6 +371,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.form-panel:focus {
+  outline: none;
 }
 
 .sheet-head {
