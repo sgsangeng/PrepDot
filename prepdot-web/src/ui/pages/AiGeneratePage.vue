@@ -252,7 +252,8 @@ async function importDeck(): Promise<void> {
 }
 
 function finish(): void {
-  void router.push({ name: 'decks' })
+  // 与「取消不导入」一致：上一页是知识树时直接后退，避免完成后按返回又回到已完成页。
+  goBack()
 }
 
 onBeforeUnmount(() => {
