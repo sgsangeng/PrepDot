@@ -2,6 +2,15 @@ import type { ApiRequest, HttpTransport, MultipartRequest, RawResponse } from '@
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
+/**
+ * 字符串视为已序列化的原始请求体（如 `/ai/import` 的原始 JSON 文本），
+ * 与 iOS 及 curl `--data-binary` 的行为一致；其余值按 JSON 序列化。
+ */
+function bodyOf(body: unknown): BodyInit | undefined {
+  if (body === undefined) return undefined
+  return typeof body === 'string' ? body : JSON.stringify(body)
+}
+
 async function parse<T>(res: Response): Promise<RawResponse<T>> {
   const text = await res.text()
   try {
@@ -20,7 +29,7 @@ export function createHttpTransport(): HttpTransport {
       return parse<T>(await fetch(BASE + req.path, {
         method: req.method,
         headers: { ...(req.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...req.headers },
-        body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
+        body: bodyOf(req.body),
         signal: req.signal
       }))
     },
@@ -39,7 +48,7 @@ export function createHttpTransport(): HttpTransport {
       const res = await fetch(BASE + req.path, {
         method: req.method,
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...req.headers },
-        body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
+        body: bodyOf(req.body),
         signal: req.signal
       })
       if (!res.ok || !res.body) {
