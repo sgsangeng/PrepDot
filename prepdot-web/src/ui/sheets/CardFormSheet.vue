@@ -3,16 +3,16 @@
 import { computed, ref } from 'vue'
 import { Bold, CheckCircle2, Circle, Code, List, ListOrdered, X } from 'lucide-vue-next'
 import type { CardPayload, Flashcard } from '@/core/api/types'
+import { buildCardPayload, type CardMode } from '@/core/cards/payload'
 import { friendlyError } from '@/core/errors'
 import { parseCardOptions } from '@/core/review/session'
 import { normalizeCardType } from '@/core/format/text'
 import { getRuntime } from '@/runtime'
 import { useDialogFocus } from '@/ui/composables/useDialogFocus'
 
-type CardMode = 'qa' | 'choice' | 'blank'
 type EditorField = 'question' | 'answer'
 
-const props = defineProps<{ deckId: number; card?: Flashcard }>()
+const props = defineProps<{ deckId: number; card?: Flashcard; deckCategory?: string }>()
 const emit = defineEmits<{ saved: [card: Flashcard]; close: [] }>()
 
 const modeTabs: readonly { value: CardMode; label: string }[] = [
@@ -83,21 +83,15 @@ function onOptionInput(i: number, event: Event): void {
 }
 
 function buildBody(): CardPayload {
-  if (mode.value === 'choice') {
-    const filled = optionValues.value.map(item => item.trim()).filter(item => item.length > 0)
-    return {
-      question: question.value.trim(),
-      answer: selectedOption.value.trim(),
-      cardType: 'choice',
-      options: JSON.stringify(filled)
-    }
-  }
-  return {
-    question: question.value.trim(),
+  return buildCardPayload({
+    mode: mode.value,
+    question: question.value,
     answer: answer.value,
-    cardType: mode.value,
-    options: null
-  }
+    optionValues: optionValues.value,
+    selectedOption: selectedOption.value,
+    card: props.card,
+    deckCategory: props.deckCategory
+  })
 }
 
 async function save(): Promise<void> {

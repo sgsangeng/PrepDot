@@ -2,7 +2,8 @@
 /* global HTMLElement */
 import { computed, ref } from 'vue'
 import { X } from 'lucide-vue-next'
-import type { Deck, DeckPayload } from '@/core/api/types'
+import type { Deck } from '@/core/api/types'
+import { buildDeckPayload } from '@/core/decks/payload'
 import { buildDeckTree, descendantIds, type DeckNode } from '@/core/decks/tree'
 import { friendlyError } from '@/core/errors'
 import { getRuntime } from '@/runtime'
@@ -65,17 +66,15 @@ async function save(): Promise<void> {
   if (!canSave.value) return
   saving.value = true
   saveError.value = ''
-  const trimmedCategory = category.value.trim() || '综合'
-  const trimmedTitle = title.value.trim()
-  const trimmedDescription = description.value.trim()
 
   try {
     const endpoints = getRuntime().endpoints
-    const body: DeckPayload = {
-      title: trimmedTitle,
-      category: trimmedCategory,
-      description: trimmedDescription === '' ? null : trimmedDescription
-    }
+    const body = buildDeckPayload({
+      title: title.value,
+      category: category.value,
+      description: description.value,
+      updating: props.deck !== undefined
+    })
 
     if (props.deck) {
       let result = await endpoints.updateDeck(props.deck.id, body)
