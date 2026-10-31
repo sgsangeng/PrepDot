@@ -216,6 +216,7 @@ const avatarStyle = computed(() => ({
     gap: 20px;
     position: sticky;
     top: 0;
+    z-index: 10;
     height: 100vh;
     border-right: 1px solid var(--border);
     background: var(--surface);
