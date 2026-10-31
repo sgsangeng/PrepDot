@@ -2,7 +2,8 @@
 /* global HTMLElement */
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Layers3, Send, X } from 'lucide-vue-next'
-import type { AgentRun, Flashcard } from '@/core/api/types'
+import type { Flashcard } from '@/core/api/types'
+import { toolSummary } from '@/core/coach/tools'
 import { friendlyError } from '@/core/errors'
 import { renderInlineMarkdown } from '@/core/format/markdown'
 import { getRuntime } from '@/runtime'
@@ -31,13 +32,6 @@ const quickQuestions = [
   '出一道同考点的题目考考我'
 ]
 
-const toolNameMap: Record<string, string> = {
-  WeakCardsTool: '薄弱卡片诊断',
-  ReviewTrendTool: '复习趋势统计',
-  NeglectedDecksTool: '冷落卡组检查',
-  GenerateSupplementCardsTool: '补强卡片生成'
-}
-
 function close(): void {
   emit('close')
 }
@@ -48,13 +42,6 @@ function buildPrompt(question: string): string {
 【答案】${props.card.answer}
 
 我的疑问：${question}`
-}
-
-function toolSummary(run: AgentRun): string | undefined {
-  const names = run.steps
-    .filter(step => step.stepType === 'TOOL' && step.toolName)
-    .map(step => toolNameMap[step.toolName as string] ?? (step.toolName as string))
-  return names.length > 0 ? `本次调用：${names.join('、')}` : undefined
 }
 
 async function send(raw: string): Promise<void> {
