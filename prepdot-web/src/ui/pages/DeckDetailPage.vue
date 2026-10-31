@@ -17,7 +17,7 @@ import ErrorState from '@/ui/components/ErrorState.vue'
 import LoadingState from '@/ui/components/LoadingState.vue'
 import CardFormSheet from '@/ui/sheets/CardFormSheet.vue'
 import type { Deck, Flashcard } from '@/core/api/types'
-import { friendlyError } from '@/core/errors'
+import { ApiError, friendlyError } from '@/core/errors'
 import { getRuntime } from '@/runtime'
 import { useToastStore } from '@/ui/stores/toast'
 
@@ -43,6 +43,7 @@ const deleting = ref(false)
 const deleteError = ref('')
 
 let loadSeq = 0
+let statsSeq = 0
 
 const deck = computed<Deck | null>(() => {
   if (props.deckId == null) return null
@@ -68,8 +69,8 @@ const deleteMessage = computed(() =>
     : '删除后该卡片将无法恢复。'
 )
 
-/** 只接受最新一次请求，避免快速切换卡组时旧响应覆盖新数据。 */
-async function load(showLoading = true): Promise<void> {
+/** 首次加载：请求失败时才展示整页错误；404 归类为「卡组不存在」。 */
+async function load(): Promise<void> {
   const id = props.deckId
   const seq = ++loadSeq
   if (id == null) {
@@ -80,7 +81,7 @@ async function load(showLoading = true): Promise<void> {
     loading.value = false
     return
   }
-  if (showLoading) loading.value = true
+  loading.value = true
   loadError.value = ''
   missing.value = false
   try {
@@ -96,9 +97,28 @@ async function load(showLoading = true): Promise<void> {
     selectedIds.value = new Set([...selectedIds.value].filter(cardId => valid.has(cardId)))
   } catch (e) {
     if (seq !== loadSeq) return
-    loadError.value = friendlyError(e)
+    if (e instanceof ApiError && e.code === 404) missing.value = true
+    else loadError.value = friendlyError(e)
   } finally {
     if (seq === loadSeq) loading.value = false
+  }
+}
+
+/**
+ * 静默刷新卡组统计（记忆度、卡片数等），不替换卡片列表，
+ * 因此不会把刚删除的卡片重新带回来，也不会因失败打断当前页面。
+ */
+async function refreshDeckStats(failureMessage: string): Promise<void> {
+  const id = props.deckId
+  if (id == null) return
+  const seq = ++statsSeq
+  try {
+    const deckList = await getRuntime().endpoints.decks()
+    if (seq !== statsSeq || props.deckId !== id) return
+    decks.value = deckList
+  } catch {
+    if (seq !== statsSeq || props.deckId !== id) return
+    toast.show(failureMessage)
   }
 }
 
@@ -114,6 +134,7 @@ function resetInteractions(): void {
 watch(
   () => props.deckId,
   () => {
+    statsSeq += 1
     resetInteractions()
     cards.value = []
     void load()
@@ -198,6 +219,8 @@ async function confirmDelete(): Promise<void> {
     } else {
       toast.show('已删除卡片')
     }
+    // 只刷新卡组统计，不重新拉取卡片列表，避免慢请求把已删除的卡片带回来。
+    void refreshDeckStats('已删除，但卡组统计暂未刷新')
   } catch (e) {
     deleteError.value = friendlyError(e)
   } finally {
@@ -205,11 +228,15 @@ async function confirmDelete(): Promise<void> {
   }
 }
 
-function onSaved(): void {
+function onSaved(saved: Flashcard): void {
   showForm.value = false
   editingCard.value = null
-  // 后台刷新，保留现有列表避免闪烁，同时同步后端生成的字段与排序。
-  void load(false)
+  // 直接用保存结果更新本地列表：新建追加、编辑按 id 替换，避免刷新失败时丢失已保存数据。
+  const exists = cards.value.some(card => card.id === saved.id)
+  cards.value = exists
+    ? cards.value.map(card => (card.id === saved.id ? saved : card))
+    : [...cards.value, saved]
+  void refreshDeckStats('已保存，但卡组统计暂未刷新')
 }
 
 function closeForm(): void {

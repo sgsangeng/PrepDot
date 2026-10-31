@@ -14,9 +14,18 @@ describe('quiz', () => {
     const quiz = buildQuiz(cards, 10, () => 0.5)
     expect(quiz).toHaveLength(5)
     for (const q of quiz) {
+      expect(q.options).toHaveLength(4)
       expect(new Set(q.options).size).toBe(q.options.length)
       expect(q.options[q.correctIndex]).toBe(q.answer)
     }
+  })
+  it('caps the quiz at 10 questions', () => {
+    const cards = Array.from({ length: 15 }, (_, i) => card(i + 1, `A${i + 1}`))
+    const quiz = buildQuiz(cards, 10, () => 0.5)
+    expect(quiz).toHaveLength(10)
+    expect(new Set(quiz.map(q => q.cardId)).size).toBe(10)
+    // 同一随机源下截断结果可复现，题量稳定为 10。
+    expect(buildQuiz(cards, 10, () => 0.5).map(q => q.cardId)).toEqual(quiz.map(q => q.cardId))
   })
   it('scores answers', () => {
     const quiz = buildQuiz([card(1, 'x'), card(2, 'y')], 10, () => 0.5)
