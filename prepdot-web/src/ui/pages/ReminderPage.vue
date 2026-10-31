@@ -6,22 +6,20 @@ import { friendlyError } from '@/core/errors'
 import { getRuntime } from '@/runtime'
 import { useAuthStore } from '@/ui/stores/auth'
 import { useToastStore } from '@/ui/stores/toast'
-
-const REMINDER_KEY = 'prepdot.reminder'
-const DEFAULT_TIME = '09:00'
-const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
-
-interface ReminderSettings {
-  enabled: boolean
-  time: string
-}
+import {
+  DEFAULT_REMINDER_TARGET,
+  DEFAULT_REMINDER_TIME,
+  REMINDER_STORAGE_KEY,
+  isValidReminderTime,
+  parseReminderSettings
+} from '@/ui/reminders/resume'
 
 const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
 
 const enabled = ref(false)
-const time = ref(DEFAULT_TIME)
+const time = ref(DEFAULT_REMINDER_TIME)
 const loading = ref(true)
 const busy = ref(false)
 const permissionDenied = ref(false)
@@ -32,29 +30,11 @@ let operationSeq = 0
 /** 与 iOS 一致：目标缺失时按 20 张兜底。 */
 const target = computed(() => {
   const value = auth.user?.studyTarget
-  return typeof value === 'number' && value > 0 ? value : 20
+  return typeof value === 'number' && value > 0 ? value : DEFAULT_REMINDER_TARGET
 })
 
-/** 存储损坏、字段缺失或格式非法时回退到默认值，避免页面崩溃。 */
-function parseSettings(raw: string | null): ReminderSettings {
-  if (!raw) return { enabled: false, time: DEFAULT_TIME }
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed !== 'object' || parsed === null) return { enabled: false, time: DEFAULT_TIME }
-    const record = parsed as Record<string, unknown>
-    return {
-      enabled: typeof record.enabled === 'boolean' ? record.enabled : false,
-      time: typeof record.time === 'string' && TIME_PATTERN.test(record.time)
-        ? record.time
-        : DEFAULT_TIME
-    }
-  } catch {
-    return { enabled: false, time: DEFAULT_TIME }
-  }
-}
-
 async function persist(): Promise<void> {
-  await getRuntime().adapters.storage.set(REMINDER_KEY, JSON.stringify({
+  await getRuntime().adapters.storage.set(REMINDER_STORAGE_KEY, JSON.stringify({
     enabled: enabled.value,
     time: time.value
   }))
@@ -68,10 +48,10 @@ onMounted(async () => {
   const runtime = getRuntime()
   try {
     const [raw, permission] = await Promise.all([
-      runtime.adapters.storage.get(REMINDER_KEY),
+      runtime.adapters.storage.get(REMINDER_STORAGE_KEY),
       runtime.adapters.notification.permission()
     ])
-    const settings = parseSettings(raw)
+    const settings = parseReminderSettings(raw)
     time.value = settings.time
 
     if (!settings.enabled) {
@@ -152,7 +132,7 @@ async function onTimeChange(): Promise<void> {
   if (busy.value) return
   saveError.value = ''
   // <input type="time"> 被清空时回退默认值，避免保存非法格式。
-  if (!TIME_PATTERN.test(time.value)) time.value = DEFAULT_TIME
+  if (!isValidReminderTime(time.value)) time.value = DEFAULT_REMINDER_TIME
 
   busy.value = true
   try {
