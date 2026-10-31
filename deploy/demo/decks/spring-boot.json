@@ -1,0 +1,107 @@
+{
+  "title": "Spring Boot 面试",
+  "category": "Spring",
+  "description": "IoC、AOP、事务与自动装配的核心考点",
+  "children": [
+    {
+      "title": "IoC 与 Bean",
+      "cards": [
+        {
+          "question": "Spring IoC 是什么？",
+          "answer": "控制反转（Inversion of Control）：对象的创建和依赖关系的管理交由 Spring 容器负责，而非对象自己创建依赖。实现方式是依赖注入（DI），通过构造器、Setter 或字段注入。"
+        },
+        {
+          "question": "Spring Bean 的作用域有哪些？",
+          "answer": "singleton（默认）：容器中唯一实例；prototype：每次请求新建；request：每次 HTTP 请求新建（Web）；session：每个 Session 新建；application：整个 Web 应用共享。"
+        },
+        {
+          "question": "Spring Bean 的生命周期？",
+          "answer": "实例化 → 属性注入 → BeanNameAware 等 Aware 接口 → BeanPostProcessor#before → @PostConstruct / InitializingBean → BeanPostProcessor#after → 使用 → @PreDestroy / DisposableBean → 销毁。"
+        },
+        {
+          "question": "BeanFactory 和 ApplicationContext 区别？",
+          "answer": "BeanFactory：基础 IoC 容器，懒加载，功能少；ApplicationContext：扩展 BeanFactory，支持 i18n、事件发布、AOP 集成、eager 初始化 singleton Bean。实际开发都用 ApplicationContext。"
+        },
+        {
+          "question": "Spring 如何解决循环依赖？",
+          "answer": "三级缓存：一级（singletonObjects）存成品 Bean；二级（earlySingletonObjects）存半成品 Bean；三级（singletonFactories）存 ObjectFactory。A 依赖 B 时，A 先放入三级缓存，B 创建时从三级取 A 的早期引用。构造器注入无法解决。"
+        }
+      ]
+    },
+    {
+      "title": "AOP 与事务",
+      "cards": [
+        {
+          "question": "Spring AOP 原理？",
+          "answer": "基于动态代理实现。目标类实现接口用 JDK 动态代理（Proxy.newProxyInstance）；否则用 CGLIB 字节码代理（生成子类）。通过切面（Aspect）在连接点（Joinpoint）执行通知（Advice）。"
+        },
+        {
+          "question": "@Transactional 失效的场景？",
+          "answer": "① 方法非 public；② 同类内部调用（绕过代理）；③ 异常被 catch 吞掉；④ 抛出 Checked 异常但未配置 rollbackFor；⑤ 数据库引擎不支持事务（如 MyISAM）；⑥ 多线程（事务绑定线程）。"
+        },
+        {
+          "question": "Spring 事务传播行为有哪些？",
+          "answer": "REQUIRED（默认）：有则加入，无则新建；REQUIRES_NEW：始终新建，挂起外部；NESTED：嵌套事务（保存点）；SUPPORTS：有则加入，无则非事务；MANDATORY：必须在事务中，否则异常；NOT_SUPPORTED / NEVER 等。"
+        },
+        {
+          "question": "Spring AOP 中 JDK 动态代理和 CGLIB 的区别？",
+          "answer": "JDK 动态代理基于接口，通过 Proxy 和 InvocationHandler 在运行时生成代理类，目标类必须有接口；CGLIB 基于继承生成子类，不能代理 final 类和 final 方法，创建较慢但调用较快。Spring 默认有接口用 JDK，无接口用 CGLIB；Boot 2.x 起默认统一用 CGLIB。"
+        },
+        {
+          "question": "如何自定义一个 Spring 注解并让其生效？",
+          "answer": "先定义注解：@interface，配合 @Retention(RUNTIME) 与 @Target；注解本身只是元数据，需要处理器才能真正生效。常见做法是用 @Aspect 切面在 @Around 中判断方法或类上的注解，或实现 BeanPostProcessor 在 Bean 初始化前后处理。"
+        }
+      ]
+    },
+    {
+      "title": "自动装配",
+      "cards": [
+        {
+          "question": "SpringBoot 自动装配原理？",
+          "answer": "@SpringBootApplication 包含 @EnableAutoConfiguration，触发 AutoConfigurationImportSelector，读取 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports 中的配置类，通过 @Conditional 按条件装配 Bean。"
+        },
+        {
+          "question": "@Component、@Service、@Repository、@Controller 区别？",
+          "answer": "都是 @Component 的派生注解，功能相同（注册 Bean），语义不同：@Repository 会捕获持久层异常并转换为 Spring 异常；@Controller 与 SpringMVC 处理器映射集成；@Service 纯语义区分。"
+        },
+        {
+          "question": "Spring Boot Starter 的作用与自定义方式？",
+          "answer": "Starter 是依赖聚合 + 自动配置：引入一个依赖即可获得某功能所需的全部 jar 和默认配置。自定义时通常拆成 starter（只依赖）和 autoconfigure（自动配置）两个模块，提供 XxxProperties 和 @Configuration，并在 AutoConfiguration.imports 中注册配置类。"
+        },
+        {
+          "question": "Spring Boot 配置文件加载顺序？",
+          "answer": "优先级从高到低：命令行参数 > Java 系统属性 / 环境变量 > 外部 config/ 目录 > 外部当前目录 > classpath 的 config/ > classpath 根目录。application-{profile}.yml 会覆盖 application.yml；@PropertySource 加载的配置优先级更低。"
+        },
+        {
+          "question": "Spring Boot 如何做统一异常处理？",
+          "answer": "使用 @RestControllerAdvice + @ExceptionHandler，按异常类型返回统一 Result；可用 @ResponseStatus 指定 HTTP 状态码，并单独处理参数校验异常（MethodArgumentNotValidException）等，避免每个 Controller 重复写 try-catch。"
+        }
+      ]
+    },
+    {
+      "title": "Spring MVC 与 Web",
+      "cards": [
+        {
+          "question": "Spring MVC 请求处理流程？",
+          "answer": "DispatcherServlet 接收请求 → HandlerMapping 找到 Controller → HandlerAdapter 执行方法 → 返回 ModelAndView → ViewResolver 解析视图 → 渲染响应。@ResponseBody 时直接用 MessageConverter 写响应体，跳过视图。"
+        },
+        {
+          "question": "什么是 Spring 的事件机制？",
+          "answer": "观察者模式实现。发布：ApplicationContext.publishEvent(event)；监听：实现 ApplicationListener<E> 或使用 @EventListener。内置事件：ContextRefreshedEvent、ContextClosedEvent 等。支持异步（@Async）。"
+        },
+        {
+          "question": "@RestController 和 @Controller 的区别？",
+          "answer": "@Controller 默认返回视图名，由 ViewResolver 解析；要返回 JSON 需在方法上加 @ResponseBody。@RestController = @Controller + @ResponseBody，类中所有方法直接把返回值写入响应体，适合前后端分离的接口。"
+        },
+        {
+          "question": "Spring 拦截器（Interceptor）和过滤器（Filter）的区别？",
+          "answer": "Filter 属于 Servlet 容器，在 DispatcherServlet 之前执行，能拿到原始 request/response，基于函数回调；Interceptor 属于 Spring MVC，在 Handler 前后执行（preHandle / postHandle / afterCompletion），可访问 HandlerMethod，基于反射。执行顺序：Filter → Interceptor → Controller。"
+        },
+        {
+          "question": "Spring Security 的认证流程？",
+          "answer": "请求进入 FilterChain → UsernamePasswordAuthenticationFilter 提取用户名密码 → AuthenticationManager → AuthenticationProvider → UserDetailsService 加载用户 → PasswordEncoder 校验 → 生成 Authentication 存入 SecurityContext。后续请求通过 SecurityContextHolder 获取认证信息；JWT 场景通常用自定义过滤器解析 token 后手动写入上下文。"
+        }
+      ]
+    }
+  ]
+}

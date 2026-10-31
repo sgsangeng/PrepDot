@@ -1,0 +1,123 @@
+{
+  "title": "Java 后端面试",
+  "category": "Java",
+  "description": "集合、JVM、并发与语言基础的高频考点",
+  "children": [
+    {
+      "title": "集合框架",
+      "cards": [
+        {
+          "question": "HashMap 和 HashTable 的区别？",
+          "answer": "HashMap：线程不安全、允许 null 键值、效率高；HashTable：线程安全（方法加 synchronized）、不允许 null、已被 ConcurrentHashMap 取代。"
+        },
+        {
+          "question": "HashMap 的底层数据结构？",
+          "answer": "JDK 1.8 后：数组 + 链表 + 红黑树。当链表长度 ≥ 8 且数组长度 ≥ 64 时转为红黑树；当节点数 < 6 时退化为链表。默认初始容量 16，负载因子 0.75。"
+        },
+        {
+          "question": "HashMap 为什么线程不安全？",
+          "answer": "多线程环境下 put 操作可能导致：① 数据覆盖（两线程同时写同一 bucket）；② 扩容时 resize 可能丢失数据。应使用 ConcurrentHashMap。"
+        },
+        {
+          "question": "ConcurrentHashMap 在 JDK 1.8 的实现原理？",
+          "answer": "放弃分段锁，改用 CAS + synchronized。只对链表/红黑树的头节点加锁，粒度更细。put 时若桶为空用 CAS，不为空用 synchronized 锁住头节点。"
+        },
+        {
+          "question": "ArrayList 和 LinkedList 的区别？",
+          "answer": "ArrayList 底层是动态数组，支持 O(1) 随机访问，尾部追加均摊 O(1)，扩容需要拷贝；LinkedList 底层是双向链表，随机访问 O(n)，定位后插入删除 O(1)，每个节点额外存前后指针。多数场景优先 ArrayList。"
+        },
+        {
+          "question": "HashMap 的扩容机制？",
+          "answer": "默认容量 16、负载因子 0.75，阈值 = 容量 × 负载因子；元素数超过阈值时容量翻倍并 rehash。JDK 1.8 用 hash & oldCap 判断元素落在原索引还是原索引 + oldCap，避免重新计算 hash。扩容开销大，已知数据量时可预设初始容量。"
+        }
+      ]
+    },
+    {
+      "title": "JVM 与类加载",
+      "cards": [
+        {
+          "question": "JVM 内存结构有哪些区域？",
+          "answer": "线程私有：程序计数器、虚拟机栈（存栈帧）、本地方法栈；线程共享：堆（对象实例）、方法区/元空间（类信息、常量池）。JDK 8 用元空间（本地内存）替代了永久代。"
+        },
+        {
+          "question": "什么是双亲委派模型？",
+          "answer": "类加载时优先委托父类加载器加载，父类无法加载才由子类加载。顺序：启动类加载器 → 扩展类加载器 → 应用类加载器。好处：避免类重复加载，保证核心类库安全性。"
+        },
+        {
+          "question": "Java 四种引用类型？",
+          "answer": "强引用：GC 不回收；软引用（SoftReference）：内存不足时回收，适合缓存；弱引用（WeakReference）：下次 GC 必回收，适合 ThreadLocal；虚引用：无法通过它访问对象，用于 GC 通知。"
+        },
+        {
+          "question": "什么是 Java 泛型擦除？",
+          "answer": "泛型信息只在编译期存在，运行时被擦除替换为 Object 或上界类型。因此不能 new T()、不能 instanceof List<String>、不能获取运行时泛型参数（反射除外）。"
+        },
+        {
+          "question": "对象在 JVM 中如何创建与分配？",
+          "answer": "类加载检查 → 分配内存（指针碰撞或空闲列表，TLAB 减少竞争）→ 内存清零 → 设置对象头（Mark Word、类型指针）→ 执行构造方法 <init>。经逃逸分析后，对象还可能栈上分配或标量替换。"
+        },
+        {
+          "question": "常见的垃圾回收器有哪些？",
+          "answer": "Serial / Serial Old：单线程、STW，适合小堆；ParNew、Parallel Scavenge / Old：多线程，后者吞吐量优先；CMS：并发标记清除，低停顿但已废弃；G1：按 Region 划分、可预测停顿，JDK 9 起默认；ZGC / Shenandoah：超低停顿，JDK 21 起 ZGC 支持分代。"
+        }
+      ]
+    },
+    {
+      "title": "并发编程",
+      "cards": [
+        {
+          "question": "线程池的核心参数与执行流程？",
+          "answer": "核心参数：corePoolSize、maximumPoolSize、keepAliveTime、workQueue、threadFactory、handler。流程：核心线程未满则新建核心线程 → 否则入队 → 队列满且未达最大线程数则新建非核心线程 → 已达上限则执行拒绝策略（如 AbortPolicy 抛异常）。"
+        },
+        {
+          "question": "synchronized 和 ReentrantLock 的区别？",
+          "answer": "synchronized 是 JVM 关键字，自动加锁释放，不支持超时/中断/公平锁；ReentrantLock 是 API，需手动 unlock（放在 finally），支持可中断、tryLock 超时、公平锁和多个 Condition。两者都可重入，JDK 6 后 synchronized 已做偏向锁等优化。"
+        },
+        {
+          "question": "volatile 关键字的作用？",
+          "answer": "保证可见性：写操作立即刷新到主内存，读操作从主内存读取；禁止指令重排（内存屏障），典型用于双重检查锁的单例。但不保证原子性，i++ 这类复合操作仍需加锁或使用原子类。"
+        },
+        {
+          "question": "ThreadLocal 的原理与内存泄漏？",
+          "answer": "每个 Thread 持有 ThreadLocalMap，key 是 ThreadLocal 的弱引用，value 是强引用。ThreadLocal 被回收后 key 变为 null，但 value 仍被线程持有，导致泄漏；因此使用完应调用 remove()。"
+        },
+        {
+          "question": "CAS 是什么？有什么问题？",
+          "answer": "Compare-And-Swap：比较内存值与预期值，相等才更新，依赖 CPU 原子指令。问题：① ABA（加版本号解决）；② 自旋失败开销大；③ 只能保证单个变量的原子性。Java 中由 Unsafe 和 AtomicInteger 等原子类提供。"
+        },
+        {
+          "question": "什么是 AQS？",
+          "answer": "AbstractQueuedSynchronizer，用 volatile int state 表示同步状态，并用 CLH 双向队列管理等待线程。ReentrantLock、Semaphore、CountDownLatch 都基于它。支持独占和共享两种模式，子类通过 tryAcquire / tryRelease 等模板方法实现。"
+        }
+      ]
+    },
+    {
+      "title": "语言基础",
+      "cards": [
+        {
+          "question": "Java 中 == 和 equals 的区别？",
+          "answer": "== 比较引用地址（基本类型比较值）；equals 默认也比较地址，但 String、Integer 等重写后比较内容。重写 equals 必须同时重写 hashCode，否则违反哈希合约。"
+        },
+        {
+          "question": "String、StringBuffer、StringBuilder 区别？",
+          "answer": "String：不可变，每次操作创建新对象；StringBuffer：可变、线程安全（synchronized）；StringBuilder：可变、线程不安全但性能最好。单线程字符串拼接用 StringBuilder。"
+        },
+        {
+          "question": "final、finally、finalize 区别？",
+          "answer": "final：修饰类（不可继承）、方法（不可重写）、变量（不可重赋值）；finally：try-catch 后必执行的块（除 System.exit()）；finalize：Object 方法，GC 前调用，已废弃不推荐使用。"
+        },
+        {
+          "question": "Java 异常体系结构？",
+          "answer": "Throwable → Error（JVM 级别，如 OOM，不应捕获）和 Exception。Exception 分 Checked（编译期必须处理，如 IOException）和 Unchecked（RuntimeException，如 NPE）。"
+        },
+        {
+          "question": "接口和抽象类的区别？",
+          "answer": "接口：多实现、方法默认 public abstract、JDK 8 后支持 default 方法、不能有构造器；抽象类：单继承、可有构造器、可有具体方法和成员变量。接口定义行为规范，抽象类提供模板。"
+        },
+        {
+          "question": "什么是反射？有什么缺点？",
+          "answer": "运行时动态获取类信息、调用方法、操作属性。通过 Class.forName() 获取 Class 对象。缺点：性能开销大（跳过 JIT 优化）、破坏封装性（可访问 private）、代码可读性差。"
+        }
+      ]
+    }
+  ]
+}

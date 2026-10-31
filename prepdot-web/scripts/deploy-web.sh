@@ -43,6 +43,7 @@ esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WEB_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+DEMO_SRC="$WEB_DIR/../deploy/demo"
 cd "$WEB_DIR"
 
 [ -f package.json ] || { echo "找不到 $WEB_DIR/package.json，请勿移动本脚本。" >&2; exit 1; }
@@ -93,6 +94,14 @@ echo "==> 检查服务器连接与 rsync"
 if ! ssh "${SSH_OPTS[@]}" "$HOST" "command -v rsync >/dev/null 2>&1"; then
   echo "SSH 连接失败，或服务器缺少 rsync。" >&2
   echo "若 SSH 能登录，请在服务器执行: sudo apt install -y rsync" >&2
+  exit 1
+fi
+
+echo "==> 同步演示账号数据与重置脚本到 /opt/prepdot/demo/"
+[ -d "$DEMO_SRC" ] || { echo "找不到演示数据目录: $DEMO_SRC" >&2; exit 1; }
+ssh "${SSH_OPTS[@]}" "$HOST" "mkdir -p '/opt/prepdot/demo/decks'"
+if ! rsync -az --delete -e "ssh -i '$KEY' -o ConnectTimeout=10" "$DEMO_SRC/" "$HOST:/opt/prepdot/demo/"; then
+  echo "同步 /opt/prepdot/demo/ 失败，演示账号数据未更新。" >&2
   exit 1
 fi
 
