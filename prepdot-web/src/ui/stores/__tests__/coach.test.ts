@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { AppAdapters, Clock, HttpTransport, RawResponse, StoragePort } from '@/adapters/types'
 import { createRuntime, setRuntime } from '@/runtime'
-import { COACH_STORAGE_KEY, useCoachStore } from '../coach'
+import { coachStorageKey, useCoachStore } from '../coach'
 
 const NOW = 1_700_000_000_000
+const ANON_KEY = coachStorageKey(null)
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const data = { ...initial }
@@ -44,7 +45,7 @@ describe('coach store', () => {
   })
 
   it('starts a fresh session when stored data is corrupt and overwrites it', async () => {
-    const storage = memoryStorage({ [COACH_STORAGE_KEY]: '{corrupt' })
+    const storage = memoryStorage({ [ANON_KEY]: '{corrupt' })
     setup(storage.port)
     const store = useCoachStore()
     await store.load()
@@ -54,13 +55,13 @@ describe('coach store', () => {
     expect(store.currentId).toBe(store.sessions[0].id)
     expect(store.messages).toEqual([])
 
-    const saved = JSON.parse(storage.data[COACH_STORAGE_KEY] as string) as unknown[]
+    const saved = JSON.parse(storage.data[ANON_KEY] as string) as unknown[]
     expect(saved).toHaveLength(1)
   })
 
   it('restores the most recently updated session', async () => {
     const storage = memoryStorage({
-      [COACH_STORAGE_KEY]: JSON.stringify([
+      [ANON_KEY]: JSON.stringify([
         { id: 'old', title: '旧会话', updatedAt: NOW - 10_000, messages: [] },
         { id: 'new', title: '新会话', updatedAt: NOW - 1_000, messages: [] }
       ])
@@ -93,7 +94,7 @@ describe('coach store', () => {
     now += 60_000
     await store.addMessage(id, { id: 'm2', role: 'assistant', text: '好的' })
 
-    const saved = JSON.parse(storage.data[COACH_STORAGE_KEY] as string) as {
+    const saved = JSON.parse(storage.data[ANON_KEY] as string) as {
       title: string
       updatedAt: number
       messages: unknown[]
@@ -128,7 +129,7 @@ describe('coach store', () => {
     expect(store.sessions).toHaveLength(1)
     expect(store.currentId).toBe(store.sessions[0].id)
 
-    const saved = JSON.parse(storage.data[COACH_STORAGE_KEY] as string) as unknown[]
+    const saved = JSON.parse(storage.data[ANON_KEY] as string) as unknown[]
     expect(saved).toHaveLength(1)
   })
 
@@ -182,5 +183,71 @@ describe('coach store', () => {
     remounted.setProgress('迟到的进度')
     expect(remounted.thinking).toBe(false)
     expect(remounted.progress).toBe('')
+  })
+
+  it('isolates persisted sessions per user across account switches', async () => {
+    const storage = memoryStorage()
+    setup(storage.port)
+    const store = useCoachStore()
+
+    store.setActiveUser(1)
+    await store.load()
+    await store.addMessage(store.currentId, {
+      id: 'a1',
+      role: 'user',
+      text: 'A 的私密问题'
+    })
+    expect(store.messages).toHaveLength(1)
+    expect(storage.data[coachStorageKey(1)]).toContain('A 的私密问题')
+
+    store.setActiveUser(2)
+    // 切换账号立即清空内存态，B 不会看到 A 的会话。
+    expect(store.sessions).toEqual([])
+    expect(store.currentId).toBe('')
+    expect(store.loaded).toBe(false)
+    expect(store.thinking).toBe(false)
+
+    await store.load()
+    expect(store.sessions).toHaveLength(1)
+    expect(store.sessions[0].messages).toEqual([])
+    // B 的存储键下没有任何 A 的内容。
+    expect(storage.data[coachStorageKey(2)] ?? '').not.toContain('A 的私密问题')
+
+    // A 的历史仍保留在自己的命名空间下，切回 A 可以继续使用。
+    store.setActiveUser(1)
+    await store.load()
+    expect(store.sessions.some(s => s.messages.some(m => m.text === 'A 的私密问题'))).toBe(true)
+  })
+
+  it('ignores an in-flight reply that arrives after the account switched', async () => {
+    const storage = memoryStorage()
+    setup(storage.port)
+    const store = useCoachStore()
+
+    store.setActiveUser(1)
+    await store.load()
+    const aSession = store.currentId
+    await store.addMessage(aSession, { id: 'a1', role: 'user', text: 'A 的问题' })
+    const aToken = store.beginRun(aSession)
+
+    store.setActiveUser(2)
+    await store.load()
+    const bToken = store.beginRun(store.currentId)
+
+    // A 的请求此时才返回；回复不能写进 B 的会话或存储。
+    await store.addMessage(aSession, { id: 'late', role: 'assistant', text: '旧账号的迟到回复' })
+    store.setProgress('A 的迟到进度', aToken)
+    store.finishRun(aToken)
+
+    expect(store.sessions.some(s => s.messages.some(m => m.text === '旧账号的迟到回复'))).toBe(false)
+    expect(storage.data[coachStorageKey(2)] ?? '').not.toContain('旧账号的迟到回复')
+    // 旧请求的收尾不能清掉 B 的进行中状态。
+    expect(store.thinking).toBe(true)
+    expect(store.progress).toBe('正在连接学习教练…')
+
+    store.setProgress('B 的进度', bToken)
+    expect(store.progress).toBe('B 的进度')
+    store.finishRun(bToken)
+    expect(store.thinking).toBe(false)
   })
 })

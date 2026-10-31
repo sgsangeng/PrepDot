@@ -92,11 +92,11 @@ function parseAgentRun(data: string): AgentRun {
  * 优先走 SSE；`error` 事件、连接失败或没有收到 result 时回退到 JSON 接口。
  * 回退也失败时把异常抛给调用方，由页面渲染友好错误气泡。
  */
-async function requestRun(text: string): Promise<AgentRun> {
+async function requestRun(text: string, runToken: number): Promise<AgentRun> {
   let run: AgentRun | null = null
   const parser = createSseParser((event) => {
     if (event.event === 'progress') {
-      store.setProgress(localizeProgress(event.data))
+      store.setProgress(localizeProgress(event.data), runToken)
       return
     }
     if (event.event === 'result') {
@@ -143,7 +143,7 @@ async function send(raw: string): Promise<void> {
   if (!sessionId) return
 
   input.value = ''
-  store.beginRun(sessionId)
+  const runToken = store.beginRun(sessionId)
   try {
     await store.addMessage(sessionId, {
       id: store.nextMessageId(),
@@ -151,7 +151,7 @@ async function send(raw: string): Promise<void> {
       text
     })
     try {
-      const run = await requestRun(text)
+      const run = await requestRun(text, runToken)
       await appendReply(sessionId, run)
     } catch (error) {
       await store.addMessage(sessionId, {
@@ -161,7 +161,7 @@ async function send(raw: string): Promise<void> {
       })
     }
   } finally {
-    store.finishRun()
+    store.finishRun(runToken)
   }
 }
 

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type { AuthUser } from '@/core/api/types'
 import { getRuntime } from '@/runtime'
 import type { Runtime } from '@/runtime'
+import { useCoachStore } from './coach'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
@@ -13,6 +14,12 @@ export const useAuthStore = defineStore('auth', () => {
   let listeningRuntime: Runtime | null = null
   let unsubscribeUnauthorized: (() => void) | null = null
 
+  /** 用户变化时同步重置教练会话，避免 B 看到 A 的历史或进行中的回复。 */
+  function applyUser(next: AuthUser | null): void {
+    user.value = next
+    useCoachStore().setActiveUser(next?.userId ?? null)
+  }
+
   /** 401 被动登出后同步 Pinia 状态，App.vue 才能切回登录页。 */
   function listenForUnauthorized(): void {
     const runtime = getRuntime()
@@ -21,7 +28,7 @@ export const useAuthStore = defineStore('auth', () => {
     unsubscribeUnauthorized?.()
     listeningRuntime = runtime
     unsubscribeUnauthorized = runtime.session.onUnauthorizedChange(() => {
-      user.value = null
+      applyUser(null)
       restored = true
       ready.value = true
     })
@@ -32,7 +39,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (restored) {
       // ApiClient 遇到 401 会让 AuthSession 自行登出；下次导航时同步清掉 store 中的旧用户，
       // 避免界面停留在「已登录」状态而守卫又不再读取存储。
-      if (user.value && !getRuntime().session.isAuthenticated) user.value = null
+      if (user.value && !getRuntime().session.isAuthenticated) applyUser(null)
       ready.value = true
       return
     }
@@ -43,9 +50,9 @@ export const useAuthStore = defineStore('auth', () => {
         try {
           const restoredUser = await getRuntime().session.restore()
           // 恢复期间若发生 401 被动登出，不要把旧用户写回 store。
-          user.value = getRuntime().session.isAuthenticated ? restoredUser : null
+          applyUser(getRuntime().session.isAuthenticated ? restoredUser : null)
         } catch {
-          user.value = null
+          applyUser(null)
         } finally {
           ready.value = true
           restored = true
@@ -58,17 +65,17 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(username: string, password: string): Promise<void> {
     listenForUnauthorized()
-    user.value = await getRuntime().session.login(username, password)
+    applyUser(await getRuntime().session.login(username, password))
   }
 
   async function register(username: string, password: string, nickname: string): Promise<void> {
     listenForUnauthorized()
-    user.value = await getRuntime().session.register(username, password, nickname)
+    applyUser(await getRuntime().session.register(username, password, nickname))
   }
 
   async function logout(): Promise<void> {
     await getRuntime().session.logout()
-    user.value = null
+    applyUser(null)
     restored = true
   }
 
