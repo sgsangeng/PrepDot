@@ -417,7 +417,12 @@ curl -fsSI https://prepdot.site/ | grep -i content-type
 | 脚本路径 | `/opt/prepdot/demo/reset-demo.sh` |
 | 执行时间 | 每天 04:17（服务器本地时区，Asia/Shanghai） |
 | cron 表达式 | `17 4 * * *` |
+| cron 命令 | `timeout 900 /opt/prepdot/demo/reset-demo.sh >> /opt/prepdot/demo-reset.log 2>&1` |
+| 互斥锁 | `/opt/prepdot/demo/.reset-demo.lock`（防止 cron 重叠执行） |
 | 作用 | 把演示账号的数据恢复到干净的初始状态，清除访客新增或修改的内容 |
+
+`timeout 900` 保证请求卡死时进程会在 15 分钟后被终止并释放锁；脚本内部对
+健康检查、注册/登录和导入分别设置了更短的 curl 超时。
 
 安装完成后，可以用下面两条命令确认它确实在跑：
 
@@ -427,7 +432,10 @@ ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 "crontab -l | grep reset-demo"
 ```
 
 演示账号由重置脚本固定为 `demo`，密码写在脚本中；请勿用该账号存放任何真实数据。
-手动执行前可先加 `--dry-run` 查看将要执行的操作。
+手动执行前可先加 `--dry-run` 查看将要执行的操作（`--dry-run` 不需要 docker/curl）。
+脚本应以 cron 的 `ubuntu` 用户运行，不要用 `sudo`：root 创建的锁文件会让之后的 cron
+任务一直拿不到锁。若同名账号的昵称不是「演示用户」，脚本会拒绝删除，需确认后用
+`FORCE_DEMO_REPLACE=1` 覆盖。
 
 ---
 

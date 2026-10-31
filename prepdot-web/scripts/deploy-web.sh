@@ -100,7 +100,7 @@ fi
 echo "==> 同步演示账号数据与重置脚本到 /opt/prepdot/demo/"
 [ -d "$DEMO_SRC" ] || { echo "找不到演示数据目录: $DEMO_SRC" >&2; exit 1; }
 ssh "${SSH_OPTS[@]}" "$HOST" "mkdir -p '/opt/prepdot/demo/decks'"
-if ! rsync -az --delete -e "ssh -i '$KEY' -o ConnectTimeout=10" "$DEMO_SRC/" "$HOST:/opt/prepdot/demo/"; then
+if ! rsync -az --delete --exclude='.reset-demo.lock' -e "ssh -i '$KEY' -o ConnectTimeout=10" "$DEMO_SRC/" "$HOST:/opt/prepdot/demo/"; then
   echo "同步 /opt/prepdot/demo/ 失败，演示账号数据未更新。" >&2
   exit 1
 fi
