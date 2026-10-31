@@ -10,7 +10,7 @@ body {
 }
 button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
-a { color: var(--color-indigo); }
+a { color: var(--color-indigo-text); }
 h1, h2, h3, p { margin: 0; }
 ul, ol { margin: 0; padding-left: 1.2em; }
 .num { font-variant-numeric: tabular-nums; }

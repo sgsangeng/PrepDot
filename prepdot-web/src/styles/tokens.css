@@ -8,6 +8,18 @@
   --color-red: #ef4444;
   --color-teal: #14b8a6;
   --color-blue: #3b82f6;
+  /*
+   * 强调色的文字版本：品牌色直接作小字号文字时对白底/浅色底不足 4.5:1，
+   * 因此单独提供更深的前景色。填充、描边、图标、图表仍使用上面的品牌色。
+   */
+  --color-indigo-text: #4338ca;
+  --color-purple-text: #6d28d9;
+  --color-pink-text: #be185d;
+  --color-red-text: #b91c1c;
+  --color-orange-text: #92400e;
+  --color-green-text: #065f46;
+  --color-teal-text: #115e59;
+  --color-blue-text: #1d4ed8;
   /* 暗色模式下图表/散点的深色端需要更亮的色值，避免与深色背景融在一起。 */
   --color-chart-start: var(--color-indigo);
   --color-mastery-end: var(--color-indigo);
@@ -56,6 +68,14 @@
     --text: #ffffff;
     --text-secondary: rgba(255, 255, 255, 0.66);
     --text-tertiary: rgba(255, 255, 255, 0.52);
+    --color-indigo-text: #a5b4fc;
+    --color-purple-text: #c4b5fd;
+    --color-pink-text: #f9a8d4;
+    --color-red-text: #fca5a5;
+    --color-orange-text: #fcd34d;
+    --color-green-text: #6ee7b7;
+    --color-teal-text: #5eead4;
+    --color-blue-text: #93c5fd;
     --color-chart-start: #818cf8;
     --color-mastery-end: #818cf8;
     --border: rgba(255, 255, 255, 0.12);

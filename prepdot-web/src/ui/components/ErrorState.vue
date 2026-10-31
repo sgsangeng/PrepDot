@@ -42,7 +42,7 @@ const emit = defineEmits<{ retry: [] }>()
 }
 
 .title {
-  color: var(--color-red);
+  color: var(--color-red-text);
   font-size: 16px;
 }
 </style>

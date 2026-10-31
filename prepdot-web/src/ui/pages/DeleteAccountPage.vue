@@ -154,7 +154,7 @@ function cancel(): void {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 14px;
   font-weight: 600;
 }
@@ -177,7 +177,7 @@ function cancel(): void {
   border: 1px solid color-mix(in srgb, var(--color-red) 35%, transparent);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-red) 10%, var(--surface));
-  color: var(--color-red);
+  color: var(--color-red-text);
   font-size: 14px;
   line-height: 1.7;
 }
@@ -203,7 +203,7 @@ function cancel(): void {
   border: 1px solid color-mix(in srgb, var(--color-red) 40%, transparent);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-red) 12%, var(--surface));
-  color: var(--color-red);
+  color: var(--color-red-text);
   font-size: 14px;
 }
 

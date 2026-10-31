@@ -234,7 +234,7 @@ onMounted(() => {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 14px;
   font-weight: 600;
 }

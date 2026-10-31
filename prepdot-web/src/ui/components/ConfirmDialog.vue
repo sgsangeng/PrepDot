@@ -185,7 +185,7 @@ useDialogFocus(panel, { onClose: cancel, initialFocus })
   border: 1px solid color-mix(in srgb, var(--color-red) 40%, transparent);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-red) 12%, var(--surface));
-  color: var(--color-red);
+  color: var(--color-red-text);
   font-size: 13px;
   overflow-wrap: anywhere;
 }

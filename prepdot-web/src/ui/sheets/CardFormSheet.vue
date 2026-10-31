@@ -446,7 +446,7 @@ useDialogFocus(panelEl, { onClose: close })
 
 .segment.active {
   background: var(--surface);
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   box-shadow: var(--shadow-sm);
 }
 
@@ -480,7 +480,7 @@ useDialogFocus(panelEl, { onClose: close })
 }
 
 .blank-btn {
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   border-color: color-mix(in srgb, var(--color-indigo) 35%, transparent);
 }
 
@@ -518,7 +518,7 @@ useDialogFocus(panelEl, { onClose: close })
   border: 1px solid color-mix(in srgb, var(--color-red) 40%, transparent);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-red) 12%, var(--surface));
-  color: var(--color-red);
+  color: var(--color-red-text);
   font-size: 14px;
 }
 

@@ -825,7 +825,7 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 14px;
   font-weight: 600;
 }
@@ -910,7 +910,7 @@ onBeforeUnmount(() => {
 
 .seg-btn.active {
   background: var(--surface);
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   box-shadow: var(--shadow-sm);
 }
 
@@ -998,7 +998,7 @@ onBeforeUnmount(() => {
   border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface-muted);
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 14px;
   font-weight: 600;
 }
@@ -1016,7 +1016,7 @@ onBeforeUnmount(() => {
   padding: 0 4px;
   border: 0;
   background: transparent;
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 14px;
   font-weight: 600;
 }
@@ -1047,7 +1047,7 @@ onBeforeUnmount(() => {
   padding: 0 4px;
   border: 0;
   background: transparent;
-  color: var(--color-red);
+  color: var(--color-red-text);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1072,7 +1072,7 @@ onBeforeUnmount(() => {
 }
 
 .control-value {
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 20px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -1206,7 +1206,7 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--color-red) 40%, transparent);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-red) 12%, var(--surface));
-  color: var(--color-red);
+  color: var(--color-red-text);
   font-size: 13px;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -1259,7 +1259,7 @@ onBeforeUnmount(() => {
 }
 
 .progress-text {
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 14px;
 }
 
@@ -1371,7 +1371,7 @@ onBeforeUnmount(() => {
 .cancel-btn {
   border-color: color-mix(in srgb, var(--color-red) 30%, transparent);
   background: transparent;
-  color: var(--color-red);
+  color: var(--color-red-text);
 }
 
 .done-icon {

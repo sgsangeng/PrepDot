@@ -351,7 +351,7 @@ async function logout(): Promise<void> {
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 14px;
   font-weight: 600;
 }
@@ -462,7 +462,7 @@ async function logout(): Promise<void> {
   inset: 0;
   display: grid;
   place-items: center;
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-family: var(--font-rounded);
   font-size: 10px;
   font-weight: 700;
@@ -568,11 +568,11 @@ async function logout(): Promise<void> {
 }
 
 .destructive-pink {
-  color: var(--color-pink);
+  color: var(--color-pink-text);
 }
 
 .destructive-red {
-  color: var(--color-red);
+  color: var(--color-red-text);
 }
 
 .settings-chevron {

@@ -248,7 +248,7 @@ async function demoLogin(): Promise<void> {
   border: 1px solid color-mix(in srgb, var(--color-red) 40%, transparent);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-red) 12%, var(--surface));
-  color: var(--color-red);
+  color: var(--color-red-text);
   font-size: 14px;
 }
 
@@ -275,7 +275,7 @@ async function demoLogin(): Promise<void> {
   padding: 0 4px;
   border: 0;
   background: transparent;
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-weight: 600;
 }
 </style>

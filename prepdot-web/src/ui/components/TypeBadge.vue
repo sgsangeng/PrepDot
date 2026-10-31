@@ -27,16 +27,16 @@ withDefaults(
 
 .tone-indigo {
   background: color-mix(in srgb, var(--color-indigo) 14%, transparent);
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
 }
 
 .tone-orange {
   background: color-mix(in srgb, var(--color-orange) 16%, transparent);
-  color: var(--color-orange);
+  color: var(--color-orange-text);
 }
 
 .tone-teal {
   background: color-mix(in srgb, var(--color-teal) 16%, transparent);
-  color: var(--color-teal);
+  color: var(--color-teal-text);
 }
 </style>

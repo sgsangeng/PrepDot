@@ -617,11 +617,11 @@ watch(
 }
 
 .feedback.correct .feedback-head {
-  color: var(--color-green);
+  color: var(--color-green-text);
 }
 
 .feedback.wrong .feedback-head {
-  color: var(--color-red);
+  color: var(--color-red-text);
 }
 
 .feedback-answer {

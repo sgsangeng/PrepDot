@@ -158,7 +158,7 @@ function optionPrefix(index: number): string {
 }
 
 .option.correct {
-  color: var(--color-green);
+  color: var(--color-green-text);
   font-weight: 600;
 }
 
@@ -184,7 +184,7 @@ function optionPrefix(index: number): string {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-weight: 600;
 }
 </style>

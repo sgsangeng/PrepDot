@@ -261,7 +261,7 @@ useDialogFocus(panelEl, { onClose: close })
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
@@ -277,7 +277,7 @@ useDialogFocus(panelEl, { onClose: close })
 }
 
 .import-btn.imported:disabled {
-  color: var(--color-green);
+  color: var(--color-green-text);
   cursor: default;
   opacity: 1;
 }
@@ -315,7 +315,7 @@ useDialogFocus(panelEl, { onClose: close })
   padding: 4px 8px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-indigo) 12%, transparent);
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 12px;
   line-height: 1.4;
 }

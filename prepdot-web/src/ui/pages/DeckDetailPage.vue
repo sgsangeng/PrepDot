@@ -540,7 +540,7 @@ function closeForm(): void {
   padding: 2px 8px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-indigo) 12%, transparent);
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 11px;
   font-weight: 600;
 }
@@ -565,13 +565,13 @@ function closeForm(): void {
 
 .quiz-btn {
   border-color: color-mix(in srgb, var(--color-indigo) 35%, transparent);
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
 }
 
 .manage-active {
   background: color-mix(in srgb, var(--color-indigo) 10%, transparent);
   border-color: color-mix(in srgb, var(--color-indigo) 35%, transparent);
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
 }
 
 .detail-body {

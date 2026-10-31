@@ -819,7 +819,7 @@ onMounted(loadPlan)
 }
 
 .deck-status.done {
-  color: var(--color-green);
+  color: var(--color-green-text);
   font-weight: 600;
 }
 
@@ -907,7 +907,7 @@ onMounted(loadPlan)
 
 .session-memory {
   font-size: 12px;
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
 }
 
 .flashcard {
@@ -985,12 +985,12 @@ onMounted(loadPlan)
 
 .badge-choice {
   background: color-mix(in srgb, var(--color-orange) 15%, transparent);
-  color: var(--color-orange);
+  color: var(--color-orange-text);
 }
 
 .badge-blank {
   background: color-mix(in srgb, var(--color-teal) 15%, transparent);
-  color: var(--color-teal);
+  color: var(--color-teal-text);
 }
 
 .front-body {
@@ -1099,7 +1099,7 @@ onMounted(loadPlan)
 }
 
 .option.correct .option-text {
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
 }
 
 .option-text {
@@ -1155,21 +1155,24 @@ onMounted(loadPlan)
   border: 1px solid color-mix(in srgb, var(--action-color) 35%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--action-color) 10%, transparent);
-  color: var(--action-color);
+  color: var(--action-text);
   font-size: 12px;
   font-weight: 600;
 }
 
 .action-chat {
   --action-color: var(--color-indigo);
+  --action-text: var(--color-indigo-text);
 }
 
 .action-edit {
   --action-color: var(--color-orange);
+  --action-text: var(--color-orange-text);
 }
 
 .action-note {
   --action-color: var(--color-teal);
+  --action-text: var(--color-teal-text);
 }
 
 .rating-bar {
@@ -1188,7 +1191,7 @@ onMounted(loadPlan)
   border: 1px solid color-mix(in srgb, var(--rating-color) 40%, transparent);
   border-radius: 14px;
   background: color-mix(in srgb, var(--rating-color) 12%, transparent);
-  color: var(--rating-color);
+  color: var(--rating-text);
   transition: transform 0.12s ease, opacity 0.12s ease;
 }
 
@@ -1203,18 +1206,22 @@ onMounted(loadPlan)
 
 .rating-again {
   --rating-color: var(--color-red);
+  --rating-text: var(--color-red-text);
 }
 
 .rating-hard {
   --rating-color: var(--color-orange);
+  --rating-text: var(--color-orange-text);
 }
 
 .rating-good {
   --rating-color: var(--color-green);
+  --rating-text: var(--color-green-text);
 }
 
 .rating-easy {
   --rating-color: var(--color-indigo);
+  --rating-text: var(--color-indigo-text);
 }
 
 .rating-label {
@@ -1235,7 +1242,7 @@ onMounted(loadPlan)
   border: 1px solid color-mix(in srgb, var(--color-red) 40%, transparent);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-red) 12%, var(--surface));
-  color: var(--color-red);
+  color: var(--color-red-text);
   font-size: 13px;
 }
 
@@ -1346,7 +1353,7 @@ onMounted(loadPlan)
   border: 1.5px solid color-mix(in srgb, var(--color-indigo) 30%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-indigo) 12%, transparent);
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 17px;
   font-weight: 700;
 }

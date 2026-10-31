@@ -200,7 +200,7 @@ const avatarStyle = computed(() => ({
 }
 
 .tab-link.active {
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
 }
 
 @media (min-width: 900px) {
@@ -263,7 +263,7 @@ const avatarStyle = computed(() => ({
   }
 
   .nav-link.active {
-    color: var(--color-indigo);
+    color: var(--color-indigo-text);
     background: color-mix(in srgb, var(--color-indigo) 10%, transparent);
   }
 

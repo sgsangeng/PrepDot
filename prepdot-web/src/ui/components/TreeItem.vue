@@ -202,15 +202,15 @@ const statusClass = computed(() => {
 }
 
 .status-red {
-  color: var(--color-red);
+  color: var(--color-red-text);
 }
 
 .status-orange {
-  color: var(--color-orange);
+  color: var(--color-orange-text);
 }
 
 .status-green {
-  color: var(--color-green);
+  color: var(--color-green-text);
 }
 
 .row-link {

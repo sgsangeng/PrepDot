@@ -97,7 +97,7 @@ const scoreToneClass = computed(() => (hasCards.value ? `score-${tone.value}` : 
   padding: 2px 8px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-indigo) 12%, transparent);
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 11px;
   font-weight: 600;
 }
@@ -130,7 +130,7 @@ const scoreToneClass = computed(() => (hasCards.value ? `score-${tone.value}` : 
 }
 
 .stat-due {
-  color: var(--color-orange);
+  color: var(--color-orange-text);
 }
 
 .score {
@@ -148,14 +148,14 @@ const scoreToneClass = computed(() => (hasCards.value ? `score-${tone.value}` : 
 }
 
 .score-red {
-  color: var(--color-red);
+  color: var(--color-red-text);
 }
 
 .score-orange {
-  color: var(--color-orange);
+  color: var(--color-orange-text);
 }
 
 .score-green {
-  color: var(--color-green);
+  color: var(--color-green-text);
 }
 </style>

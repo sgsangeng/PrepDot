@@ -291,7 +291,7 @@ function goBack(): void {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-indigo);
+  color: var(--color-indigo-text);
   font-size: 14px;
   font-weight: 600;
 }
@@ -428,13 +428,13 @@ function goBack(): void {
 .hint-warning {
   border: 1px solid color-mix(in srgb, var(--color-orange) 35%, transparent);
   background: color-mix(in srgb, var(--color-orange) 12%, var(--surface));
-  color: var(--color-orange);
+  color: var(--color-orange-text);
 }
 
 .hint-error {
   border: 1px solid color-mix(in srgb, var(--color-red) 35%, transparent);
   background: color-mix(in srgb, var(--color-red) 10%, var(--surface));
-  color: var(--color-red);
+  color: var(--color-red-text);
 }
 
 .note {
