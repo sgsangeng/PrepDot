@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 
 const props = withDefaults(
-  defineProps<{ value: number; max: number; tone?: 'indigo' | 'green' }>(),
+  defineProps<{ value: number; max: number; tone?: 'indigo' | 'green' | 'orange' | 'red' }>(),
   { tone: 'indigo' }
 )
 
@@ -50,5 +50,13 @@ const percent = computed(() => {
 
 .tone-green {
   background: var(--color-green);
+}
+
+.tone-orange {
+  background: var(--color-orange);
+}
+
+.tone-red {
+  background: var(--color-red);
 }
 </style>
