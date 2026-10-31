@@ -18,6 +18,15 @@
   --border: rgba(38, 13, 89, 0.1);
   --border-strong: rgba(38, 13, 89, 0.18);
 
+  --on-primary: #ffffff;
+  --on-danger: #ffffff;
+  --focus-ring: rgba(79, 70, 229, 0.16);
+  --overlay: rgba(10, 10, 36, 0.45);
+  --toast-bg: rgba(20, 20, 51, 0.92);
+  --toast-text: #ffffff;
+  --shadow-primary: 0 8px 20px rgba(79, 70, 229, 0.35);
+  --glass-border: rgba(255, 255, 255, 0.7);
+
   --radius-sm: 12px;
   --radius-md: 16px;
   --radius-lg: 20px;
@@ -45,6 +54,14 @@
     --text-tertiary: rgba(255, 255, 255, 0.42);
     --border: rgba(255, 255, 255, 0.12);
     --border-strong: rgba(255, 255, 255, 0.2);
+    --on-primary: #ffffff;
+    --on-danger: #ffffff;
+    --focus-ring: rgba(129, 140, 248, 0.35);
+    --overlay: rgba(0, 0, 0, 0.6);
+    --toast-bg: rgba(56, 56, 96, 0.95);
+    --toast-text: #ffffff;
+    --shadow-primary: 0 8px 20px rgba(0, 0, 0, 0.45);
+    --glass-border: rgba(255, 255, 255, 0.14);
     --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.36);
     --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);

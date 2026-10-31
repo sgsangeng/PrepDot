@@ -35,8 +35,15 @@ function scheduleNext(time: string, target: number): void {
   if (delay === null) return
   timer = setTimeout(() => {
     timer = null
-    showReminder(target)
-    scheduleNext(time, target)
+    // 移动端浏览器（如 Chrome Android）可能直接禁止 Notification 构造函数，异常
+    // 不能中断次日的提醒链路；可靠的后台提醒需要 Service Worker，留到 Phase 2。
+    try {
+      showReminder(target)
+    } catch {
+      // 忽略通知构造失败，仍然安排下一次提醒。
+    } finally {
+      scheduleNext(time, target)
+    }
   }, delay)
 }
 

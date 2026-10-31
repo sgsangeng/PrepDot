@@ -20,7 +20,12 @@ export default [
       'no-restricted-imports': ['error', {
         patterns: [
           { group: ['vue', 'vue-router', 'pinia'], message: 'core 必须与框架无关' },
-          { group: ['@/adapters/web', '@/adapters/web/*', '../adapters/web', '../adapters/web/*', '../../adapters/web', '../../adapters/web/*'], message: 'core 不得依赖浏览器实现' }
+          { group: [
+            '@/adapters/web', '@/adapters/web/*',
+            '../adapters/web', '../adapters/web/*',
+            '../../adapters/web', '../../adapters/web/*',
+            '../../../adapters/web', '../../../adapters/web/*'
+          ], message: 'core 不得依赖浏览器实现' }
         ]
       }],
       'no-restricted-globals': ['error',
@@ -36,8 +41,21 @@ export default [
     files: ['src/ui/**/*.{ts,vue}'],
     rules: {
       'no-restricted-imports': ['error', {
-        patterns: [{ group: ['@/adapters/web', '@/adapters/web/*'], message: 'UI 只使用 runtime/store' }]
-      }]
+        patterns: [{
+          group: [
+            '@/adapters/web', '@/adapters/web/*',
+            '../adapters/web', '../adapters/web/*',
+            '../../adapters/web', '../../adapters/web/*',
+            '../../../adapters/web', '../../../adapters/web/*'
+          ],
+          message: 'UI 只使用 runtime/store'
+        }]
+      }],
+      'no-restricted-globals': ['error',
+        { name: 'fetch', message: '使用注入的 HttpTransport' },
+        { name: 'localStorage', message: '使用 StoragePort' },
+        { name: 'navigator', message: '使用注入的 adapter' }
+      ]
     }
   },
   { ignores: ['dist/**', 'node_modules/**', 'e2e-results/**'] }

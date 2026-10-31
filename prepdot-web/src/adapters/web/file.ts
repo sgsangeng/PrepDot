@@ -21,11 +21,21 @@ export function createFilePort(): FilePort {
         document.body.appendChild(input)
 
         let settled = false
+        let safetyTimer: number | null = null
+
+        const cleanup = (): void => {
+          window.removeEventListener('focus', onWindowFocus)
+          if (safetyTimer !== null) {
+            window.clearTimeout(safetyTimer)
+            safetyTimer = null
+          }
+          input.remove()
+        }
+
         const finish = (files: PickedFile[]): void => {
           if (settled) return
           settled = true
-          window.removeEventListener('focus', onWindowFocus)
-          input.remove()
+          cleanup()
           resolve(files)
         }
 
@@ -41,6 +51,9 @@ export function createFilePort(): FilePort {
         })
         input.addEventListener('cancel', () => finish([]))
         window.addEventListener('focus', onWindowFocus)
+
+        // 兜底：对话框异常或用户长时间未操作时，避免隐藏 input 与监听器泄漏。
+        safetyTimer = window.setTimeout(() => finish([]), 60_000)
 
         input.click()
       })

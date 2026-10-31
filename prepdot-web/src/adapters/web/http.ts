@@ -42,7 +42,21 @@ export function createHttpTransport(): HttpTransport {
         body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
         signal: req.signal
       })
-      if (!res.ok || !res.body) throw new Error(`流式请求失败（${res.status}）`)
+      if (!res.ok || !res.body) {
+        let detail = ''
+        try {
+          const text = await res.text()
+          try {
+            const parsed = JSON.parse(text) as { message?: string }
+            detail = (parsed.message ?? text).slice(0, 300)
+          } catch {
+            detail = text.slice(0, 300)
+          }
+        } catch {
+          // 读取错误响应体失败时保留状态码信息即可。
+        }
+        throw new Error(`流式请求失败（${res.status}）${detail ? `：${detail}` : ''}`)
+      }
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       try {
@@ -51,7 +65,14 @@ export function createHttpTransport(): HttpTransport {
           if (done) break
           yield decoder.decode(value, { stream: true })
         }
+        const tail = decoder.decode()
+        if (tail) yield tail
       } finally {
+        try {
+          await reader.cancel()
+        } catch {
+          // 流可能已正常结束或被网络中断，取消失败不影响调用方。
+        }
         reader.releaseLock()
       }
     }
