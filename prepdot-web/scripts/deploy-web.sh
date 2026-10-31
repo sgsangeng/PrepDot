@@ -106,8 +106,8 @@ for required in "$DEMO_SRC/reset-demo.sh" "$DEMO_SRC/demo-backdate.sql"; do
     exit 1
   }
 done
-if ! compgen -G "$DEMO_SRC/decks/*.json" >/dev/null; then
-  echo "演示数据不完整：$DEMO_SRC/decks/ 下没有 .json 卡组文件；已中止，避免 --delete 清空远端演示资源。" >&2
+if [ -z "$(find "$DEMO_SRC/decks" -maxdepth 1 -type f -name '*.json' -size +0 -print -quit 2>/dev/null || true)" ]; then
+  echo "演示数据不完整：$DEMO_SRC/decks/ 下没有非空的 .json 卡组文件；已中止，避免 --delete 清空远端演示资源。" >&2
   exit 1
 fi
 ssh "${SSH_OPTS[@]}" "$HOST" "mkdir -p '/opt/prepdot/demo/decks'"
