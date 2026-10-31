@@ -8,7 +8,9 @@
 - 后端 API（iOS 也用它）：<https://api.prepdot.site>
 - 反代：Caddy 容器 `adeer-caddy-1`，宿主机配置 `/opt/adeer/Caddyfile`
 
-> 本文只处理 Web 静态站点与 Caddy 配置。**不改 iOS 代码，也不改后端接口。**
+> 本文只处理 Web 静态站点与 Caddy 配置。**不改 iOS 代码，也不改变后端接口契约**：
+> 本分支在后端 `JwtAuthFilter` 中放行了浏览器 CORS 预检的 `OPTIONS` 请求（接口路径、
+> 请求体与响应结构均未变化）。
 
 ---
 
@@ -43,7 +45,9 @@
 关键点：
 
 - **同一个域名、同一个来源**：Web 端的接口请求走相对路径 `/api/...`，最终由 Caddy 转发给
-  `prepdot-backend:8080`。因此生产环境**没有跨域问题**，也不需要配置 CORS。
+  `prepdot-backend:8080`。因此生产环境**没有跨域问题**，也不需要额外的 CORS 响应头；
+  后端 `JwtAuthFilter` 会直接放行浏览器预检的 `OPTIONS` 请求（便于本地开发等跨域场景），
+  实际业务请求仍然要求 `Authorization`。
 - **静态站点**：`prepdot.site/` 的所有非 `/api/*`、非 `/welcome/*` 请求都指向
   `/srv/legal/prepdot-site/app`，由 Caddy 的 `file_server` 提供文件。
 - **客户端路由**：Vue Router 使用 history 模式，像 `/decks/123` 这样的地址并不存在于磁盘上。
@@ -150,11 +154,12 @@ ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
 > 发布脚本也会自动做一次同样的迁移（仅当 `welcome/index.html` 不存在且根目录还有
 > `index.html` 时），这里先手动做是为了让 Caddy 切换后 `/welcome/` 立刻可访问。
 
-### 3.4 合并新的 Caddyfile（不要整份覆盖）
+### 3.4 合并新的 Caddyfile（只能手动合并）
 
 仓库里的 `deploy/Caddyfile.prepdot` **只包含 prepdot 自己的站点块，不是服务器上
-`/opt/adeer/Caddyfile` 的完整镜像**。线上文件可能还含有旧落地页配置或其它站点，
-整份覆盖会让它们在下一次 reload 后一起消失。
+`/opt/adeer/Caddyfile` 的完整镜像**。线上文件同时还承载其它站点（至少包含
+`{$SITE_ADDRESS}`、`adeer.site`、`sssangeng.online` 等），整份覆盖会让它们在下一次
+reload 后一起消失。**不存在「线上只有 prepdot 配置就整体覆盖」的选项，必须手动合并。**
 
 先把新文件传到服务器，并检查线上文件的实际内容：
 
@@ -170,33 +175,22 @@ ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
   "sudo cat -n /opt/adeer/Caddyfile"
 ```
 
-根据看到的内容二选一：
+用编辑器手动合并，**不要整份复制覆盖**：
 
-1. **线上文件只含 prepdot 配置**（只有 `api.prepdot.site`、旧的 `prepdot.site`，
-   没有其它域名）时，可以整体覆盖：
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "sudo nano /opt/adeer/Caddyfile"    # 或用 sudo vim
+```
 
-   ```bash
-   ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
-     "sudo cp /tmp/Caddyfile.prepdot /opt/adeer/Caddyfile"
-   ```
+只做两件事：
 
-   3.2 的备份仍然要保留，作为回滚依据。
+- 删掉旧的 `prepdot.site { ... }` / `www.prepdot.site { ... }` 块（如果存在，
+  否则同域名重复定义会报错）；
+- 把仓库文件里的 `www.prepdot.site { ... }`、`prepdot.site { ... }` 两个块
+  追加到文件末尾；`api.prepdot.site` 已存在且内容一致时保持原样，不要重复添加。
 
-2. **线上文件还含有其它站点**（例如别的域名、别的服务）时，**绝对不要覆盖**，
-   用编辑器手动合并：
-
-   ```bash
-   ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
-     "sudo nano /opt/adeer/Caddyfile"    # 或用 sudo vim
-   ```
-
-   只做两件事：
-   - 删掉旧的 `prepdot.site { ... }` / `www.prepdot.site { ... }` 块（如果存在，
-     否则同域名重复定义会报错）；
-   - 把仓库文件里的 `www.prepdot.site { ... }`、`prepdot.site { ... }` 两个块
-     追加到文件末尾；`api.prepdot.site` 已存在且内容一致时保持原样，不要重复添加。
-
-   保存后再次 `sudo cat -n /opt/adeer/Caddyfile`，确认其它站点块仍在。
+`{$SITE_ADDRESS}`、`adeer.site`、`sssangeng.online` 等其它站点块必须原样保留。
+保存后再次 `sudo cat -n /opt/adeer/Caddyfile`，确认其它站点块仍在。
 
 新配置对应的最终形态（三份站点块）：
 
@@ -208,7 +202,7 @@ ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
   - 其余所有路径 → `app/` 目录，找不到文件回落 `index.html`（客户端路由）；
   - 统一加 `X-Content-Type-Options`、`Referrer-Policy`、`X-Frame-Options` 安全头。
 
-### 3.5 校验并重载 Caddy
+### 3.5 校验、对比并重载 Caddy
 
 **不要跳过校验。** 配置写错时 `reload` 会失败；先 `validate` 能看到具体错误行。
 
@@ -217,7 +211,19 @@ ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
   "docker exec adeer-caddy-1 caddy validate --config /etc/caddy/Caddyfile"
 ```
 
-看到 `Valid configuration` 后再重载：
+看到 `Valid configuration` 后，再把合并结果与 3.2 的备份做一次 diff，确认只改动了
+预期的 prepdot 块、其它站点原样保留：
+
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "sudo diff -u /opt/adeer/Caddyfile.bak.20261101-120000 /opt/adeer/Caddyfile || true"
+```
+
+把文件名换成实际备份。diff 里只应出现 `prepdot.site` / `www.prepdot.site` 的增删；
+如果出现 `{$SITE_ADDRESS}`、`adeer.site`、`sssangeng.online` 等其它块的变化，
+先不要 reload，回到编辑器修正。
+
+确认无误后再重载：
 
 ```bash
 ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
@@ -266,7 +272,7 @@ curl -sI https://www.prepdot.site/ | head -n 1            # 状态行应为 301
 
 期望：
 
-- `/api/health` 返回 `{"code":0,...}` 之类的成功 JSON（具体字段以接口为准）；
+- `/api/health` 返回 `{"code":200,...}` 之类的成功 JSON（具体字段以接口为准）；
 - `/` 和 `/review` 返回 `200`，`Content-Type: text/html`（后者验证刷新深链不 404）；
 - `/welcome/` 返回 `200`，内容仍是原来的宣传/法律页；
 - `/welcome`（不带斜杠）返回 **301**，`Location: /welcome/`；
@@ -403,39 +409,98 @@ curl -fsSI https://prepdot.site/ | grep -i content-type
 
 ---
 
-## 6. 演示账号与每日重置（脚本已就绪，待安装 cron）
+## 6. 演示账号与每日重置（脚本已就绪，需安装 cron）
 
 生产环境提供一个公开的演示账号，方便访客直接体验。为了避免访客把演示数据改乱，
 服务器上有一个重置脚本，由 cron 每天凌晨自动恢复初始状态。
 
 > **当前状态**：卡组数据、回填 SQL 与 `reset-demo.sh` 已在仓库 `deploy/demo/` 中，
-> 发布 Web 站点时会自动同步到 `/opt/prepdot/demo/`；cron 仍待安装，安装前不会自动重置。
+> 发布 Web 站点时会自动同步到 `/opt/prepdot/demo/`。按 §6.1 安装 cron 并手动执行一次后，
+> 才会开始每日自动重置。
 
 | 项目 | 值 |
 |---|---|
-| 状态 | 脚本已就绪，cron 待安装 |
+| 状态 | 脚本已就绪，需按 §6.1 安装 cron |
 | 脚本路径 | `/opt/prepdot/demo/reset-demo.sh` |
 | 执行时间 | 每天 04:17（服务器本地时区，Asia/Shanghai） |
 | cron 表达式 | `17 4 * * *` |
 | cron 命令 | `timeout 900 /opt/prepdot/demo/reset-demo.sh >> /opt/prepdot/demo-reset.log 2>&1` |
 | 互斥锁 | `/opt/prepdot/demo/.reset-demo.lock`（防止 cron 重叠执行） |
+| 标记文件 | `/opt/prepdot/demo/.demo-user-id`（记录 demo 用户数据库 id，用于识别被改名的账号） |
 | 作用 | 把演示账号的数据恢复到干净的初始状态，清除访客新增或修改的内容 |
 
 `timeout 900` 保证请求卡死时进程会在 15 分钟后被终止并释放锁；脚本内部对
 健康检查、注册/登录和导入分别设置了更短的 curl 超时。
 
-安装完成后，可以用下面两条命令确认它确实在跑：
+### 6.1 安装 cron 并首次执行
+
+1. 在服务器安装 cron（会替换同名旧条目，保留其它任务）：
+
+   ```bash
+   ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 '
+     (crontab -l 2>/dev/null | grep -v "/opt/prepdot/demo/reset-demo.sh"; \
+      echo "17 4 * * * timeout 900 /opt/prepdot/demo/reset-demo.sh >> /opt/prepdot/demo-reset.log 2>&1") | crontab -
+     crontab -l | grep reset-demo
+   '
+   ```
+
+   输出里应能看到带 `timeout 900` 的完整命令。
+
+2. 安装后先手动完整执行一次，确认注册、导入和回填都成功（不要用 `sudo`）：
+
+   ```bash
+   ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+     "chmod +x /opt/prepdot/demo/reset-demo.sh && timeout 900 /opt/prepdot/demo/reset-demo.sh"
+   ```
+
+   成功时最后几行应包含 `demo 数据已重置：...` 以及
+   `卡组 ... 个 / 卡片 60 张 / 今日到期 ... 张 / 复习记录 ... 条`。
+
+3. 检查标记文件与日志：
+
+   ```bash
+   ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+     "ls -l /opt/prepdot/demo/.demo-user-id && tail -n 30 /opt/prepdot/demo-reset.log"
+   ```
+
+   `.demo-user-id` 应只有一行数字（权限 `-rw-------`）。手动执行时输出在终端；
+   `demo-reset.log` 会在下一次 cron 运行后写入，首次安装后第二天再检查一次。
+
+4. 失败观察：建议每天花一分钟看日志：
+
+   ```bash
+   ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+     "tail -n 30 /opt/prepdot/demo-reset.log; grep -n '重置失败' /opt/prepdot/demo-reset.log || true"
+   ```
+
+   脚本失败时会以非零退出码结束，并打印 `重置失败：<原因>`。如果日志里超过一天没有新的
+   `demo 数据已重置`，先检查 `crontab -l`、`docker ps` 中的 MySQL/后端容器，以及
+   `/opt/prepdot/.env.production` 的读取权限。
+
+### 6.2 重置标记与账号被改名的恢复
+
+演示密码是公开的，访客登录后可以通过 `PUT /api/auth/profile` 修改 demo 账号的昵称。
+脚本用 `/opt/prepdot/demo/.demo-user-id` 记录上次成功重置时的用户数据库 id：
+
+- 昵称仍是「演示用户」→ 正常继续；
+- 昵称被改、但当前 id 与标记一致 → 打印警告后继续重置（重新注册会把昵称恢复成「演示用户」）；
+- 昵称和 id 都对不上，或标记不存在 → 中止，提示设置 `FORCE_DEMO_REPLACE=1`。
+
+**残余限制**：拿到公开 demo 密码的人也可以先删除账号、再用同名重新注册。此时数据库 id
+会变化，标记无法匹配，夜间重置会中止而不再自动恢复。发现日志里的「重置失败」并确认
+没有真实用户受影响后，用下面命令人工恢复一次（脚本会删除并重建 demo 数据，随后写入新 id）：
 
 ```bash
-ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 "ls -l /opt/prepdot/demo/reset-demo.sh"
-ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 "crontab -l | grep reset-demo"
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "cd /opt/prepdot/demo && FORCE_DEMO_REPLACE=1 timeout 900 ./reset-demo.sh"
 ```
 
+标记文件与 `.reset-demo.lock` 都不会被发布脚本的 `rsync --delete` 删除。
+
 演示账号由重置脚本固定为 `demo`，密码写在脚本中；请勿用该账号存放任何真实数据。
-手动执行前可先加 `--dry-run` 查看将要执行的操作（`--dry-run` 不需要 docker/curl）。
-脚本应以 cron 的 `ubuntu` 用户运行，不要用 `sudo`：root 创建的锁文件会让之后的 cron
-任务一直拿不到锁。若同名账号的昵称不是「演示用户」，脚本会拒绝删除，需确认后用
-`FORCE_DEMO_REPLACE=1` 覆盖。
+手动执行前可先加 `--dry-run` 查看将要执行的操作（`--dry-run` 不需要 docker/curl，
+也不会读写标记文件）。脚本应以 cron 的 `ubuntu` 用户运行，不要用 `sudo`：root 创建的
+锁文件会让之后的 cron 任务一直拿不到锁。
 
 ---
 
@@ -537,8 +602,15 @@ curl -fsSI https://prepdot.site/ | grep -i content-type
 2. **AI Key 为明文环境变量**：后端读取 `AI_DEEPSEEK_SYSTEM_KEY`，它来自服务器上的
    `.env.production`，以明文形式存在并由 Docker 注入容器。不要把它提交进仓库；
    服务器被入侵时该 key 会泄露，届时应在供应商后台吊销并轮换。
-3. **演示账号有额度**：演示账号消耗的是真实的 AI 额度，因此应保持较低的使用上限，
-   并由每日重置脚本清理数据，避免被滥用。
+   环境变量文件应只对运行用户可读，确认权限为 `-rw-------`：
+
+   ```bash
+   ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+     "sudo chmod 600 /opt/prepdot/.env.production && ls -l /opt/prepdot/.env.production"
+   ```
+3. **演示账号没有独立 AI 配额**：后端没有按账号限制 AI 调用量，而演示密码是公开的，
+   任何访客登录后都能消耗真实的 AI 额度；每日重置只恢复数据，不会限制调用次数。
+   若发现被滥用，应在后端或网关增加限流，必要时临时停用演示账号。
 4. **不要在前端写入任何密钥**：`prepdot-web/` 构建产物是公开可下载的，任何注入到
    `VITE_*` 变量的内容都会出现在浏览器里。
 5. **发布脚本不含密钥**：`deploy-web.sh` 只使用本机 SSH 私钥路径与目标地址，
@@ -549,5 +621,7 @@ curl -fsSI https://prepdot.site/ | grep -i content-type
 ## 10. 边界
 
 - **不改 iOS**：`prepdot-ios/` 与 `api.prepdot.site` 的行为保持不变。
-- **不改后端接口**：本阶段 Web 端复用现有 `/api`，Caddy 只做路径转发。
+- **不改后端接口契约**：本阶段 Web 端复用现有 `/api`，Caddy 只做路径转发。分支里唯一的
+  后端改动是 `JwtAuthFilter` 对 `OPTIONS` 预检直接放行（浏览器预检不携带 Authorization，
+  否则会被 401 拦截）；接口路径、请求体与响应结构未变。
 - **桌面端（Phase 2）尚未开始**：后续才会确定 Tauri/Electron 方案与部署方式。

@@ -17,6 +17,7 @@ DEMO_DIR="${PREPDOT_DEMO_DIR:-/opt/prepdot/demo}"
 ENV_FILE="${PREPDOT_ENV_FILE:-/opt/prepdot/.env.production}"
 MYSQL_CONTAINER="${PREPDOT_MYSQL_CONTAINER:-prepdot-mysql}"
 LOCK_FILE="${PREPDOT_DEMO_LOCK:-$DEMO_DIR/.reset-demo.lock}"
+MARKER_FILE="${PREPDOT_DEMO_MARKER:-$DEMO_DIR/.demo-user-id}"
 FORCE_DEMO_REPLACE="${FORCE_DEMO_REPLACE:-0}"
 
 DRY_RUN=0
@@ -43,7 +44,8 @@ usage() {
   PREPDOT_ENV_FILE          生产环境变量文件，默认 /opt/prepdot/.env.production
   PREPDOT_MYSQL_CONTAINER   MySQL 容器名，默认 prepdot-mysql
   PREPDOT_DEMO_LOCK         互斥锁文件，默认 $PREPDOT_DEMO_DIR/.reset-demo.lock
-  FORCE_DEMO_REPLACE=1      允许覆盖昵称不是「演示用户」的同名账号（危险）
+  PREPDOT_DEMO_MARKER       记录 demo 用户数据库 id 的标记，默认 $PREPDOT_DEMO_DIR/.demo-user-id
+  FORCE_DEMO_REPLACE=1      允许覆盖无法通过昵称或标记确认归属的同名账号（危险）
 
 注意：不要用 sudo 运行本脚本。root 创建的锁文件会归 root 所有，
 之后 cron 以 ubuntu 用户运行时将永远拿不到锁。
@@ -71,7 +73,7 @@ shopt -u nullglob
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "[dry-run] API: $API"
   echo "[dry-run] 环境变量文件：$ENV_FILE（MySQL 容器 $MYSQL_CONTAINER）"
-  echo "[dry-run] 将确认同名账号昵称是「$DEMO_NICKNAME」，否则中止（除非 FORCE_DEMO_REPLACE=1）"
+  echo "[dry-run] 将检查 demo 账号昵称与 $MARKER_FILE 中的用户 id；昵称被改但 id 一致时继续，否则中止（除非 FORCE_DEMO_REPLACE=1）"
   echo "[dry-run] 将解除外部用户指向 demo 卡组的 parent_id，再按外键安全顺序删除："
   echo "[dry-run]   agent_step → agent_run → daily_plan → review_record → deck（级联 flashcard）→ user"
   echo "[dry-run] 将重新注册并登录用户：$DEMO_USER"
@@ -119,12 +121,38 @@ printf '%s' "$HEALTH" | grep -Eq '"code"[[:space:]]*:[[:space:]]*200' \
 
 # 用户名唯一索引不区分大小写（utf8mb4_0900_ai_ci），因此 'demo'、'Demo'
 # 会命中同一个账号。首次执行前确认它不是真实用户，避免误删。
-EXISTING_NICK="$(mysql_exec <<'SQL'
-SELECT nickname FROM user WHERE username = 'demo' LIMIT 1;
+#
+# 演示密码是公开的，访客可以登录后把 demo 改名。为了不因此永久停掉夜间重置：
+# - 昵称仍是「演示用户」→ 直接继续；
+# - 昵称被改、但数据库 id 与上次成功重置写入的标记一致 → 说明仍是脚本管理的账号，
+#   记录警告后继续（重新注册会恢复昵称）；
+# - 两者都对不上（或没有标记）→ 中止，要求人工确认 FORCE_DEMO_REPLACE=1。
+MARKER_ID=""
+if [ -r "$MARKER_FILE" ]; then
+  MARKER_ID="$(tr -d '[:space:]' < "$MARKER_FILE" || true)"
+  case "$MARKER_ID" in
+    ''|*[!0-9]*) MARKER_ID="" ;;
+  esac
+fi
+
+EXISTING_ID=""
+EXISTING_NICK=""
+EXISTING_ROW="$(mysql_exec <<'SQL'
+SELECT id, IFNULL(nickname, '') FROM user WHERE username = 'demo' LIMIT 1;
 SQL
 )"
-if [ -n "$EXISTING_NICK" ] && [ "$EXISTING_NICK" != "$DEMO_NICKNAME" ] && [ "$FORCE_DEMO_REPLACE" != "1" ]; then
-  die "已存在用户名 demo 的账号，但昵称是「$EXISTING_NICK」而不是「$DEMO_NICKNAME」。为避免误删真实用户已中止；确认要覆盖请设置 FORCE_DEMO_REPLACE=1 后重试。"
+if [ -n "$EXISTING_ROW" ]; then
+  IFS=$'\t' read -r EXISTING_ID EXISTING_NICK <<< "$EXISTING_ROW"
+fi
+
+if [ -n "$EXISTING_ID" ] && [ "$EXISTING_NICK" != "$DEMO_NICKNAME" ]; then
+  if [ "$FORCE_DEMO_REPLACE" = "1" ]; then
+    warn "demo 账号昵称为「$EXISTING_NICK」（不是「$DEMO_NICKNAME」）；已按 FORCE_DEMO_REPLACE=1 覆盖。"
+  elif [ -n "$MARKER_ID" ] && [ "$EXISTING_ID" = "$MARKER_ID" ]; then
+    warn "demo 账号昵称已被改为「$EXISTING_NICK」，但 id=$EXISTING_ID 与标记 $MARKER_FILE 一致；继续重置并恢复昵称。"
+  else
+    die "已存在用户名 demo 的账号，但昵称是「$EXISTING_NICK」而不是「$DEMO_NICKNAME」，且无法确认它由重置脚本管理（标记 id=${MARKER_ID:-缺失}，实际 id=$EXISTING_ID）。为避免误删真实用户已中止；确认要覆盖请设置 FORCE_DEMO_REPLACE=1 后重试。"
+  fi
 fi
 
 echo "==> 删除 demo 旧数据"
@@ -198,6 +226,18 @@ RECORD_COUNT="$(printf '%s\n' "$SUMMARY" | sed -n '4p')"
 # 今日到期数受自增 id 分布影响，只告警不失败。
 [ "$DUE_COUNT" = "18" ] \
   || warn "今日到期卡片数为 $DUE_COUNT，预期约 18（自增 id 不连续时会偏移）。"
+
+# 记录本次成功重置后的 demo 用户 id，供下次运行确认账号仍由脚本管理。
+DEMO_ID="$(mysql_exec <<'SQL'
+SELECT id FROM user WHERE username = 'demo' LIMIT 1;
+SQL
+)"
+[ -n "$DEMO_ID" ] || die "重置后找不到 demo 账号，无法写入用户 id 标记：$MARKER_FILE"
+if printf '%s\n' "$DEMO_ID" > "$MARKER_FILE" 2>/dev/null; then
+  chmod 600 "$MARKER_FILE" 2>/dev/null || true
+else
+  warn "无法写入 $MARKER_FILE；下次运行只能凭昵称识别 demo 账号。"
+fi
 
 echo "demo 数据已重置：$(date '+%F %T')"
 echo "  卡组 $DECK_COUNT 个 / 卡片 $CARD_COUNT 张 / 今日到期 $DUE_COUNT 张 / 复习记录 $RECORD_COUNT 条"

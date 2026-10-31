@@ -99,8 +99,19 @@ fi
 
 echo "==> 同步演示账号数据与重置脚本到 /opt/prepdot/demo/"
 [ -d "$DEMO_SRC" ] || { echo "找不到演示数据目录: $DEMO_SRC" >&2; exit 1; }
+# rsync 使用 --delete：源目录不完整时会把远端演示资源一起删掉，必须先确认关键文件齐全。
+for required in "$DEMO_SRC/reset-demo.sh" "$DEMO_SRC/demo-backdate.sql"; do
+  [ -s "$required" ] || {
+    echo "演示数据不完整：缺少 $required；已中止，避免 --delete 清空远端演示资源。" >&2
+    exit 1
+  }
+done
+if ! compgen -G "$DEMO_SRC/decks/*.json" >/dev/null; then
+  echo "演示数据不完整：$DEMO_SRC/decks/ 下没有 .json 卡组文件；已中止，避免 --delete 清空远端演示资源。" >&2
+  exit 1
+fi
 ssh "${SSH_OPTS[@]}" "$HOST" "mkdir -p '/opt/prepdot/demo/decks'"
-if ! rsync -az --delete --exclude='.reset-demo.lock' -e "ssh -i '$KEY' -o ConnectTimeout=10" "$DEMO_SRC/" "$HOST:/opt/prepdot/demo/"; then
+if ! rsync -az --delete --exclude='.reset-demo.lock' --exclude='.demo-user-id' -e "ssh -i '$KEY' -o ConnectTimeout=10" "$DEMO_SRC/" "$HOST:/opt/prepdot/demo/"; then
   echo "同步 /opt/prepdot/demo/ 失败，演示账号数据未更新。" >&2
   exit 1
 fi

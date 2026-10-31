@@ -2759,7 +2759,7 @@ rsync -az -e "ssh -i $KEY" deploy/demo/ "$HOST:/opt/prepdot/demo/"
 ```bash
 ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 '
   (crontab -l 2>/dev/null | grep -v "/opt/prepdot/demo/reset-demo.sh"; \
-   echo "17 4 * * * /opt/prepdot/demo/reset-demo.sh >> /opt/prepdot/demo-reset.log 2>&1") | crontab -
+   echo "17 4 * * * timeout 900 /opt/prepdot/demo/reset-demo.sh >> /opt/prepdot/demo-reset.log 2>&1") | crontab -
   crontab -l | tail -3
 '
 ```
