@@ -54,6 +54,12 @@ pnpm lint       # ESLint
 pnpm e2e        # Playwright 端到端测试
 ```
 
+发布生产环境（在仓库根目录或 `prepdot-web/` 下均可）：
+
+```bash
+prepdot-web/scripts/deploy-web.sh
+```
+
 开发模式下 `/api` 会被代理到 `http://127.0.0.1:8080`（可用 `VITE_DEV_API_TARGET` 覆盖）；
 生产环境 Web 与 API 同源，均由 Caddy 反代。Web 端的首次部署、日常发布、回滚与常见问题见
 [DEPLOY-WEB.md](DEPLOY-WEB.md)。

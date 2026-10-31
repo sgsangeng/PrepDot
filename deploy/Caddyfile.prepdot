@@ -3,7 +3,13 @@ api.prepdot.site {
     reverse_proxy prepdot-backend:8080
 }
 
-prepdot.site, www.prepdot.site {
+# 统一使用 apex 域名：JWT 存在 localStorage，按 origin 隔离，
+# 在 www 上登录不会带到 prepdot.site，因此整体 301 到 apex。
+www.prepdot.site {
+    redir https://prepdot.site{uri} permanent
+}
+
+prepdot.site {
     encode zstd gzip
 
     handle /api/* {
@@ -11,7 +17,7 @@ prepdot.site, www.prepdot.site {
     }
 
     handle /welcome {
-        redir /welcome/ permanent
+        redir /welcome /welcome/ permanent
     }
 
     handle /welcome/* {

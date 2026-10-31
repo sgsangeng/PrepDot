@@ -6,7 +6,7 @@ set -euo pipefail
 HOST="${PREPDOT_SSH_HOST:-ubuntu@62.234.146.153}"
 KEY="${PREPDOT_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 ROOT="/opt/adeer/legal/prepdot-site"
-SITE_URL="https://prepdot.site"
+SITE_URL="${PREPDOT_SITE_URL:-https://prepdot.site}"
 SSH_OPTS=(-i "$KEY" -o ConnectTimeout=10)
 
 # 0 = 远端目录还没切换，1 = 已经切换（失败时要提示回滚）
@@ -51,7 +51,7 @@ command -v pnpm >/dev/null 2>&1 || { echo "本机未安装 pnpm，请先执行: 
 command -v rsync >/dev/null 2>&1 || { echo "本机未安装 rsync，无法上传构建产物。" >&2; exit 1; }
 
 rollback_cmd() {
-  echo "ssh -i \"$KEY\" $HOST \"cd $ROOT && rm -rf app.failed && mv app app.failed && mv app.prev app\""
+  echo "ssh -i \"$KEY\" $HOST \"cd $ROOT && if [ ! -d app.prev ]; then echo '没有 app.prev，无需回滚'; exit 0; fi; rm -rf app.failed && mv app app.failed && mv app.prev app\""
 }
 
 on_exit() {
@@ -80,7 +80,8 @@ pnpm build
 [ -f dist/index.html ] || { echo "构建产物 dist/index.html 不存在。" >&2; exit 1; }
 
 if [[ "${YES:-0}" != "1" ]]; then
-  read -r -p "发布到 ${HOST}? [y/N] " answer
+  # EOF（如 Ctrl+D / 无 stdin）时视为取消，而不是让 set -e 抛错。
+  read -r -p "发布到 ${HOST}? [y/N] " answer || answer=""
   if [[ "$answer" != "y" && "$answer" != "Y" ]]; then
     CANCELLED=1
     echo "已取消。"
@@ -110,7 +111,7 @@ ssh "${SSH_OPTS[@]}" "$HOST" "
 "
 
 echo "==> 上传构建产物到 app.new/"
-if ! rsync -az --delete -e "ssh -i $KEY -o ConnectTimeout=10" dist/ "$HOST:$ROOT/app.new/"; then
+if ! rsync -az --delete -e "ssh -i '$KEY' -o ConnectTimeout=10" dist/ "$HOST:$ROOT/app.new/"; then
   echo "rsync 上传失败。若提示 rsync 不存在，请到服务器执行: sudo apt install -y rsync" >&2
   exit 1
 fi

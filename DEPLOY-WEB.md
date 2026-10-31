@@ -19,9 +19,12 @@
                     │          Caddy（容器 adeer-caddy-1）          │
   iOS App ─────────►│  api.prepdot.site ──► /api/*                  │
                     │                                              │
-  浏览器 ──────────►│  prepdot.site ─────► /api/* ──┐               │
-  （Web 端）        │            └──────► /app 静态文件              │
+  浏览器（Web）────►│  prepdot.site ─────► /api/* ──┐               │
+                    │            └──────► /app 静态文件              │
                     │            └──────► /welcome/ 宣传页          │
+                    │                                              │
+  桌面端 ──────────►│  Phase 2（规划中，方案未定）                   │
+  macOS / Windows   │  后续接入同一套 /api                          │
                     └───────────────────────────────┬──────────────┘
                                                     │ HTTP（同一 Docker 网络 prepdot_proxy）
                                                     ▼
@@ -47,6 +50,9 @@
   Caddy 用 `try_files {path} /index.html` 兜底：找不到文件就返回 `index.html`，交给前端路由处理。
 - **目录映射**：Caddy 容器里的 `/srv/legal/prepdot-site` 对应宿主机上的
   `/opt/adeer/legal/prepdot-site`（发布脚本操作的是宿主机路径）。
+- **规范域名是 `prepdot.site`**：`www.prepdot.site` 会 301 到 apex。JWT 存在 localStorage，
+  按 origin 隔离，如果允许用户在 www 登录，切到 `prepdot.site` 后会变成未登录状态，
+  所以统一收敛到一个域名。
 
 ---
 
@@ -68,8 +74,8 @@ nginx 当然也能做到，但对本项目的规模来说，Caddy 需要维护�
 首次部署会改变 `prepdot.site` 根路径的提供内容：从"宣传/法律落地页"切换为"Web 应用"，
 同时把落地页移动到 `/welcome/`。
 
-> ⚠️ 从 Caddy 配置生效到第一次构建上传完成之间，`prepdot.site` 可能短暂显示 404。
-> 建议在访问量低的时段操作，整个过程通常几分钟。
+> ⚠️ 404 窗口：从 §3.3 把落地页文件移入 `welcome/` 开始，到 §3.6 第一次发布完成之间，
+> `prepdot.site` 根路径会暂时 404。建议在访问量低的时段操作，整个过程通常几分钟。
 
 ### 3.1 前置条件检查
 
@@ -144,21 +150,59 @@ ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
 > 发布脚本也会自动做一次同样的迁移（仅当 `welcome/index.html` 不存在且根目录还有
 > `index.html` 时），这里先手动做是为了让 Caddy 切换后 `/welcome/` 立刻可访问。
 
-### 3.4 写入新的 Caddyfile
+### 3.4 合并新的 Caddyfile（不要整份覆盖）
 
-把仓库里的 `deploy/Caddyfile.prepdot` 传到服务器，再覆盖配置：
+仓库里的 `deploy/Caddyfile.prepdot` **只包含 prepdot 自己的站点块，不是服务器上
+`/opt/adeer/Caddyfile` 的完整镜像**。线上文件可能还含有旧落地页配置或其它站点，
+整份覆盖会让它们在下一次 reload 后一起消失。
+
+先把新文件传到服务器，并检查线上文件的实际内容：
 
 ```bash
 scp -i ~/.ssh/id_ed25519 deploy/Caddyfile.prepdot ubuntu@62.234.146.153:/tmp/Caddyfile.prepdot
 
+# 如果 3.2 已经备份过，这步可跳过；否则再备份一次
 ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
-  "sudo cp /tmp/Caddyfile.prepdot /opt/adeer/Caddyfile && sudo cat /opt/adeer/Caddyfile"
+  "sudo cp /opt/adeer/Caddyfile /opt/adeer/Caddyfile.bak.\$(date +%Y%m%d-%H%M%S)"
+
+# 查看线上配置，确认一共有哪些站点块
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "sudo cat -n /opt/adeer/Caddyfile"
 ```
 
-新配置的内容（两份站点块）：
+根据看到的内容二选一：
+
+1. **线上文件只含 prepdot 配置**（只有 `api.prepdot.site`、旧的 `prepdot.site`，
+   没有其它域名）时，可以整体覆盖：
+
+   ```bash
+   ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+     "sudo cp /tmp/Caddyfile.prepdot /opt/adeer/Caddyfile"
+   ```
+
+   3.2 的备份仍然要保留，作为回滚依据。
+
+2. **线上文件还含有其它站点**（例如别的域名、别的服务）时，**绝对不要覆盖**，
+   用编辑器手动合并：
+
+   ```bash
+   ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+     "sudo nano /opt/adeer/Caddyfile"    # 或用 sudo vim
+   ```
+
+   只做两件事：
+   - 删掉旧的 `prepdot.site { ... }` / `www.prepdot.site { ... }` 块（如果存在，
+     否则同域名重复定义会报错）；
+   - 把仓库文件里的 `www.prepdot.site { ... }`、`prepdot.site { ... }` 两个块
+     追加到文件末尾；`api.prepdot.site` 已存在且内容一致时保持原样，不要重复添加。
+
+   保存后再次 `sudo cat -n /opt/adeer/Caddyfile`，确认其它站点块仍在。
+
+新配置对应的最终形态（三份站点块）：
 
 - `api.prepdot.site`：原样转发到 `prepdot-backend:8080`。
-- `prepdot.site` 与 `www.prepdot.site`：
+- `www.prepdot.site`：301 到 `https://prepdot.site{uri}`（规范域名见第 1 节说明）。
+- `prepdot.site`：
   - `/api/*` → 后端（这也是 Web 端同源调用 API 的原因）；
   - `/welcome` → 301 到 `/welcome/`；`/welcome/*` 从站点根目录找文件，即宣传页；
   - 其余所有路径 → `app/` 目录，找不到文件回落 `index.html`（客户端路由）；
@@ -183,12 +227,22 @@ ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
 若 `validate` 报错，把报错行对照 `deploy/Caddyfile.prepdot` 检查；不要重载，先修好文件。
 如果 `reload` 后站点异常，回到 [3.2](#32-备份现有-caddyfile) 用备份文件覆盖回来再 reload。
 
+> 注意：旧配置通常从站点根目录提供落地页，而 §3.3 已经把落地页移进了 `welcome/`。
+> 只恢复旧 Caddyfile 的话，根路径会因为没有 `index.html` 而 404。恢复旧配置后，
+> 还要把落地页文件移回根目录（见 [5.2](#52-回滚-caddy-配置)），再 reload。
+
 > 本仓库开发机上没有安装 `caddy`，所以 `deploy/Caddyfile.prepdot` 没有在本地校验过。
 > **每次改动后都必须在服务器上执行上面的 `caddy validate`，通过后再 reload。**
 
 ### 3.6 第一次发布 Web 应用
 
-在本地仓库根目录（或在 `prepdot-web/` 下）执行：
+在本地仓库根目录执行：
+
+```bash
+prepdot-web/scripts/deploy-web.sh
+```
+
+或在 `prepdot-web/` 目录下执行：
 
 ```bash
 cd prepdot-web
@@ -206,13 +260,19 @@ curl -fsS https://prepdot.site/api/health
 curl -fsSI https://prepdot.site/
 curl -fsSI https://prepdot.site/welcome/
 curl -fsSI https://prepdot.site/review
+curl -sI https://prepdot.site/welcome | head -n 1          # 状态行应为 301
+curl -sI https://www.prepdot.site/ | head -n 1            # 状态行应为 301
 ```
 
 期望：
 
 - `/api/health` 返回 `{"code":0,...}` 之类的成功 JSON（具体字段以接口为准）；
 - `/` 和 `/review` 返回 `200`，`Content-Type: text/html`（后者验证刷新深链不 404）；
-- `/welcome/` 返回 `200`，内容仍是原来的宣传/法律页。
+- `/welcome/` 返回 `200`，内容仍是原来的宣传/法律页；
+- `/welcome`（不带斜杠）返回 **301**，`Location: /welcome/`；
+- `https://www.prepdot.site/` 返回 **301**，`Location: https://prepdot.site/`。
+  不要用 `curl -f` 判断跳转以外的内容，先看状态行和 `Location` 头即可：
+  `curl -sI https://www.prepdot.site/ | grep -i '^location'`。
 
 再用浏览器打开 <https://prepdot.site>，能正常登录并看到复习页即完成。
 
@@ -311,39 +371,62 @@ ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
 ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
   "sudo cp /opt/adeer/Caddyfile.bak.20261101-120000 /opt/adeer/Caddyfile"
 
-# 3. 校验 + 重载
+# 3. 如果备份是"从站点根目录提供落地页"的旧配置，把落地页文件从 welcome/ 移回根目录
+#    （否则根路径会因为没有 index.html 而 404；文件不存在时跳过）
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "cd /opt/adeer/legal/prepdot-site && \
+   for f in index.html site.css site.js app-icon.png; do \
+     if [ -f \"welcome/\$f\" ] && [ ! -f \"\$f\" ]; then mv \"welcome/\$f\" ./; fi; \
+   done && ls -l . welcome"
+
+# 4. 校验 + 重载
 ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
   "docker exec adeer-caddy-1 caddy validate --config /etc/caddy/Caddyfile"
 ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
   "docker exec adeer-caddy-1 caddy reload --config /etc/caddy/Caddyfile"
 ```
 
-重载后访问 <https://api.prepdot.site/api/health> 与 <https://prepdot.site> 确认恢复。
+重载后验证：
+
+```bash
+curl -fsS https://api.prepdot.site/api/health
+curl -sI https://prepdot.site/ | head -n 1   # 应为 200
+curl -fsSI https://prepdot.site/ | grep -i content-type
+```
+
+如果回滚后的旧配置只提供落地页、没有 `/api` 反代，那么 `prepdot.site` 的 200 页面是
+宣传页而不是 Web 应用，这是符合预期的——此时 Web 端本身也随之下线，直到重新应用新配置。
+
+> 注意：只恢复 Caddyfile、不把落地页文件移回根目录时，旧配置找不到 `index.html`，
+> 根路径会一直是 404。要么按上面第 3 步移回文件，要么重新应用新配置并保持文件在
+> `welcome/` 下。
 
 ---
 
-## 6. 演示账号与每日重置
+## 6. 演示账号与每日重置（计划中）
 
-生产环境提供一个公开的演示账号，方便访客直接体验。为了避免访客把演示数据改乱，
-服务器上有一个重置脚本，由 cron 每天凌晨自动恢复初始状态：
+生产环境计划提供一个公开的演示账号，方便访客直接体验。为了避免访客把演示数据改乱，
+服务器上会有一个重置脚本，由 cron 每天凌晨自动恢复初始状态。
+
+> **当前尚未安装**：脚本、cron 与演示账号都会在后续步骤中部署。本节先固定约定，
+> 安装完成后才按"已生效"来理解。
 
 | 项目 | 值 |
 |---|---|
+| 状态 | 计划中（后续步骤安装） |
 | 脚本路径 | `/opt/prepdot/demo/reset-demo.sh` |
 | 执行时间 | 每天 04:17（服务器本地时区，Asia/Shanghai） |
 | cron 表达式 | `17 4 * * *` |
 | 作用 | 把演示账号的数据恢复到干净的初始状态，清除访客新增或修改的内容 |
 
-> 该脚本会在后续步骤中安装。本文先固定路径与时间约定；安装完成后，
-> 可以用下面两条命令确认它确实在跑：
->
-> ```bash
-> ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 "ls -l /opt/prepdot/demo/reset-demo.sh"
-> ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 "crontab -l | grep reset-demo"
-> ```
->
-> 演示账号的用户名/密码由后端初始化数据决定，不在本仓库与本文中记录，避免泄露。
-> 当前阶段该脚本尚未部署，属正常现象。
+安装完成后，可以用下面两条命令确认它确实在跑：
+
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 "ls -l /opt/prepdot/demo/reset-demo.sh"
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 "crontab -l | grep reset-demo"
+```
+
+演示账号的用户名/密码由后端初始化数据决定，不在本仓库与本文中记录，避免泄露。
 
 ---
 
@@ -362,7 +445,12 @@ curl -fsSI https://prepdot.site/review
 
 # 宣传/法律页
 curl -fsSI https://prepdot.site/welcome/
-curl -fsSI https://prepdot.site/welcome   # 应 301 到 /welcome/
+curl -sI https://prepdot.site/welcome | head -n 1   # 应为 301，Location: /welcome/
+curl -sI https://prepdot.site/welcome | grep -i '^location'
+
+# 规范域名：www 应 301 到 apex
+curl -sI https://www.prepdot.site/ | head -n 1     # 应为 301
+curl -sI https://www.prepdot.site/ | grep -i '^location'
 
 # 首页 Content-Type（应为 text/html）
 curl -fsSI https://prepdot.site/ | grep -i content-type
@@ -377,7 +465,8 @@ curl -fsSI https://prepdot.site/ | grep -i content-type
 浏览器里点导航正常，但直接打开或刷新 `/review`、`/decks/1` 变成 404。
 
 - 原因：Caddy 没有用 `try_files {path} /index.html` 兜底，或新 Caddyfile 没有 reload。
-- 处理：确认服务器上的 Caddyfile 与仓库里 `deploy/Caddyfile.prepdot` 一致，再
+- 处理：确认服务器上 Caddyfile 的 `prepdot.site` 块与仓库里 `deploy/Caddyfile.prepdot` 一致
+  （线上可能还有其它站点块，**不要整份覆盖**，只对照 prepdot 相关块），再
   `caddy validate` + `caddy reload`；用 `curl -fsSI https://prepdot.site/review` 验证返回 200。
 
 ### API 返回 401
