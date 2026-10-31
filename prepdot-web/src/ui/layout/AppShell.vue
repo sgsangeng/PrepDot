@@ -99,9 +99,6 @@ const avatarStyle = computed(() => ({
         <h1 class="page-title">
           {{ title }}
         </h1>
-        <div class="topbar-actions">
-          <slot name="actions" />
-        </div>
       </header>
       <main class="main">
         <slot />
@@ -167,12 +164,6 @@ const avatarStyle = computed(() => ({
 .page-title {
   font-size: 18px;
   font-weight: 700;
-}
-
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .main {

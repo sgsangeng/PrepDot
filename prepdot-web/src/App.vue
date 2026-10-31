@@ -10,15 +10,15 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
-// 401 被动登出或手动登出后，立即离开需要登录的页面；初始恢复完成前不跳转。
+// 401 被动登出或手动登出后，立即离开需要登录的页面。
+// 初始导航交给路由守卫：此时 route.name 可能尚未解析，watcher 不参与。
 watch(
   () => auth.ready && !auth.isAuthenticated,
   (loggedOut) => {
-    if (loggedOut && route.name !== 'login') {
+    if (loggedOut && route.name != null && route.name !== 'login') {
       void router.replace({ name: 'login' })
     }
-  },
-  { immediate: true }
+  }
 )
 </script>
 

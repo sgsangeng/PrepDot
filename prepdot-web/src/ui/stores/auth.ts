@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AuthUser } from '@/core/api/types'
 import { getRuntime } from '@/runtime'
+import type { Runtime } from '@/runtime'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
@@ -9,13 +10,17 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => user.value !== null)
   let restored = false
   let restoring: Promise<void> | null = null
-  let listening = false
+  let listeningRuntime: Runtime | null = null
+  let unsubscribeUnauthorized: (() => void) | null = null
 
   /** 401 被动登出后同步 Pinia 状态，App.vue 才能切回登录页。 */
   function listenForUnauthorized(): void {
-    if (listening) return
-    listening = true
-    getRuntime().session.onUnauthorizedChange(() => {
+    const runtime = getRuntime()
+    if (unsubscribeUnauthorized && listeningRuntime === runtime) return
+    // runtime 被替换时（测试/热重载）先退订旧会话，避免重复回调。
+    unsubscribeUnauthorized?.()
+    listeningRuntime = runtime
+    unsubscribeUnauthorized = runtime.session.onUnauthorizedChange(() => {
       user.value = null
       restored = true
       ready.value = true

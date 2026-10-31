@@ -88,7 +88,7 @@ async function demoLogin(): Promise<void> {
         <Brain
           class="brand-icon"
           :size="64"
-          stroke="url(#brand-gradient)"
+          color="url(#brand-gradient)"
           aria-hidden="true"
         />
         <h1 class="brand-title">
@@ -270,6 +270,7 @@ async function demoLogin(): Promise<void> {
 }
 
 .link {
+  min-width: 44px;
   min-height: 44px;
   padding: 0 4px;
   border: 0;

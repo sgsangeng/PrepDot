@@ -1,7 +1,7 @@
 <script setup lang="ts">
 withDefaults(
-  defineProps<{ message: string; title?: string; retryText?: string }>(),
-  { title: '出错了', retryText: '重试' }
+  defineProps<{ message: string; title?: string; retryText?: string; showRetry?: boolean }>(),
+  { title: '出错了', retryText: '重试', showRetry: false }
 )
 
 const emit = defineEmits<{ retry: [] }>()
@@ -19,6 +19,7 @@ const emit = defineEmits<{ retry: [] }>()
       {{ message }}
     </p>
     <button
+      v-if="showRetry"
       class="btn btn-ghost"
       type="button"
       @click="emit('retry')"
