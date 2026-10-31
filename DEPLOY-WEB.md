@@ -9,8 +9,8 @@
 - 反代：Caddy 容器 `adeer-caddy-1`，宿主机配置 `/opt/adeer/Caddyfile`
 
 > 本文只处理 Web 静态站点与 Caddy 配置。**不改 iOS 代码，也不改变后端接口契约**：
-> 本分支在后端 `JwtAuthFilter` 中放行了浏览器 CORS 预检的 `OPTIONS` 请求（接口路径、
-> 请求体与响应结构均未变化）。
+> 本分支在后端 `JwtAuthFilter` 中放行了浏览器 CORS 预检的 `OPTIONS` 请求，并新增
+> 「账号注销后旧 token 失效」校验；接口路径、请求体与响应结构均未变化。
 
 ---
 
@@ -621,7 +621,7 @@ curl -fsSI https://prepdot.site/ | grep -i content-type
 ## 10. 边界
 
 - **不改 iOS**：`prepdot-ios/` 与 `api.prepdot.site` 的行为保持不变。
-- **不改后端接口契约**：本阶段 Web 端复用现有 `/api`，Caddy 只做路径转发。分支里唯一的
-  后端改动是 `JwtAuthFilter` 对 `OPTIONS` 预检直接放行（浏览器预检不携带 Authorization，
-  否则会被 401 拦截）；接口路径、请求体与响应结构未变。
+- **不改后端接口契约**：本阶段 Web 端复用现有 `/api`，Caddy 只做路径转发。分支里的后端
+  改动只在 `JwtAuthFilter`：放行浏览器 `OPTIONS` 预检（预检不携带 Authorization，否则会被
+  401 拦截），并在账号注销后拒绝旧 token；接口路径、请求体与响应结构未变。
 - **桌面端（Phase 2）尚未开始**：后续才会确定 Tauri/Electron 方案与部署方式。
