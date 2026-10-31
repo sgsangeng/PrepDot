@@ -1,0 +1,455 @@
+# Web 端生产部署指南
+
+本文面向不熟悉运维的同学，从零解释 Web 端（`prepdot-web/`）如何上线、如何发布、出问题怎么回滚。
+照着做即可；每条命令都可以直接复制。
+
+- Web 应用地址：<https://prepdot.site>
+- 旧的宣传/法律落地页：<https://prepdot.site/welcome/>
+- 后端 API（iOS 也用它）：<https://api.prepdot.site>
+- 反代：Caddy 容器 `adeer-caddy-1`，宿主机配置 `/opt/adeer/Caddyfile`
+
+> 本文只处理 Web 静态站点与 Caddy 配置。**不改 iOS 代码，也不改后端接口。**
+
+---
+
+## 1. 整体架构
+
+```text
+                    ┌──────────────────────────────────────────────┐
+                    │          Caddy（容器 adeer-caddy-1）          │
+  iOS App ─────────►│  api.prepdot.site ──► /api/*                  │
+                    │                                              │
+  浏览器 ──────────►│  prepdot.site ─────► /api/* ──┐               │
+  （Web 端）        │            └──────► /app 静态文件              │
+                    │            └──────► /welcome/ 宣传页          │
+                    └───────────────────────────────┬──────────────┘
+                                                    │ HTTP（同一 Docker 网络 prepdot_proxy）
+                                                    ▼
+                                        ┌───────────────────────┐
+                                        │ Spring Boot 容器       │
+                                        │ prepdot-backend:8080   │
+                                        └───────────┬───────────┘
+                                                    │
+                                                    ▼
+                                        ┌───────────────────────┐
+                                        │ MySQL 容器             │
+                                        │ prepdot-mysql:3306     │
+                                        └───────────────────────┘
+```
+
+关键点：
+
+- **同一个域名、同一个来源**：Web 端的接口请求走相对路径 `/api/...`，最终由 Caddy 转发给
+  `prepdot-backend:8080`。因此生产环境**没有跨域问题**，也不需要配置 CORS。
+- **静态站点**：`prepdot.site/` 的所有非 `/api/*`、非 `/welcome/*` 请求都指向
+  `/srv/legal/prepdot-site/app`，由 Caddy 的 `file_server` 提供文件。
+- **客户端路由**：Vue Router 使用 history 模式，像 `/decks/123` 这样的地址并不存在于磁盘上。
+  Caddy 用 `try_files {path} /index.html` 兜底：找不到文件就返回 `index.html`，交给前端路由处理。
+- **目录映射**：Caddy 容器里的 `/srv/legal/prepdot-site` 对应宿主机上的
+  `/opt/adeer/legal/prepdot-site`（发布脚本操作的是宿主机路径）。
+
+---
+
+## 2. 为什么用 Caddy，而不是 nginx
+
+1. **自动 HTTPS**：Caddy 会自动向 Let's Encrypt 申请并续期证书，不需要手写 certbot 定时任务。
+   新加一个域名，基本只要写好站点块。
+2. **配置短、可读**：上面的整份配置只有几十行，`try_files`、反代、跳转一眼能看懂。
+3. **项目已经用它**：`api.prepdot.site` 一直由同一个 Caddy 容器提供服务，再加 Web 站点不需要
+   引入第二套反代，也不用迁移现有配置。
+4. **内置压缩**：`encode zstd gzip` 一行就开启压缩。
+
+nginx 当然也能做到，但对本项目的规模来说，Caddy 需要维护的东西更少。
+
+---
+
+## 3. 首次部署（只做一次）
+
+首次部署会改变 `prepdot.site` 根路径的提供内容：从"宣传/法律落地页"切换为"Web 应用"，
+同时把落地页移动到 `/welcome/`。
+
+> ⚠️ 从 Caddy 配置生效到第一次构建上传完成之间，`prepdot.site` 可能短暂显示 404。
+> 建议在访问量低的时段操作，整个过程通常几分钟。
+
+### 3.1 前置条件检查
+
+在**本地**仓库根目录确认：
+
+```bash
+# 本地需要 pnpm、rsync
+pnpm -v
+rsync --version | head -n 1
+
+# 确认能免密登录服务器
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 'echo ok'
+```
+
+如果上一条要你输密码，说明密钥没有配好，先解决 SSH 登录，再继续。
+
+到**服务器**上确认 Caddy 容器存在，并查看宿主机目录是怎么挂进容器的：
+
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "docker ps --filter name=adeer-caddy-1 --format '{{.Names}} {{.Status}}'"
+
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "docker inspect adeer-caddy-1 --format '{{range .Mounts}}{{println .Source \" -> \" .Destination}}{{end}}'"
+```
+
+输出里应当能找到两件事（路径以实际输出为准）：
+
+- `/opt/adeer/Caddyfile` 被挂载进容器（常见位置是 `/etc/caddy/Caddyfile`）；
+- `/opt/adeer/legal` 被挂载到容器的 `/srv/legal`（站点文件由此暴露）。
+
+如果第二条不存在，需要先给容器补上挂载，否则 Caddy 找不到站点文件。本文后续命令假设
+容器内配置路径是 `/etc/caddy/Caddyfile`；**如果你的输出不同，请把命令里的路径换成实际值。**
+
+再确认 Caddy 容器和 backend 在同一个 Docker 网络（否则 `prepdot-backend:8080` 解析不到）：
+
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "docker inspect adeer-caddy-1 --format '{{range \$k,\$v := .NetworkSettings.Networks}}{{println \$k}}{{end}}'"
+```
+
+输出里应有 `prepdot_proxy`。
+
+### 3.2 备份现有 Caddyfile
+
+**任何修改之前先备份。** 备份文件名带时间戳，方便回滚时辨认：
+
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "sudo cp /opt/adeer/Caddyfile /opt/adeer/Caddyfile.bak.\$(date +%Y%m%d-%H%M%S) && ls -l /opt/adeer/Caddyfile*"
+```
+
+记下输出里备份文件的名字（例如 `/opt/adeer/Caddyfile.bak.20261101-120000`）。
+
+### 3.3 创建目录并迁移落地页
+
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "mkdir -p /opt/adeer/legal/prepdot-site/app /opt/adeer/legal/prepdot-site/welcome"
+
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "cd /opt/adeer/legal/prepdot-site && \
+   for f in index.html site.css site.js app-icon.png; do \
+     [ -f \"\$f\" ] && mv \"\$f\" welcome/ || true; \
+   done && ls -l . welcome"
+```
+
+如果提示 `Permission denied`，先用 `ls -ld /opt/adeer/legal/prepdot-site` 看目录属主，
+把当前用户加进去或调整属主（例如 `sudo chown -R ubuntu:ubuntu /opt/adeer/legal/prepdot-site`），
+再重试。发布脚本本身不使用 `sudo`，因此当前 SSH 用户必须对站点目录有写权限。
+
+> 发布脚本也会自动做一次同样的迁移（仅当 `welcome/index.html` 不存在且根目录还有
+> `index.html` 时），这里先手动做是为了让 Caddy 切换后 `/welcome/` 立刻可访问。
+
+### 3.4 写入新的 Caddyfile
+
+把仓库里的 `deploy/Caddyfile.prepdot` 传到服务器，再覆盖配置：
+
+```bash
+scp -i ~/.ssh/id_ed25519 deploy/Caddyfile.prepdot ubuntu@62.234.146.153:/tmp/Caddyfile.prepdot
+
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "sudo cp /tmp/Caddyfile.prepdot /opt/adeer/Caddyfile && sudo cat /opt/adeer/Caddyfile"
+```
+
+新配置的内容（两份站点块）：
+
+- `api.prepdot.site`：原样转发到 `prepdot-backend:8080`。
+- `prepdot.site` 与 `www.prepdot.site`：
+  - `/api/*` → 后端（这也是 Web 端同源调用 API 的原因）；
+  - `/welcome` → 301 到 `/welcome/`；`/welcome/*` 从站点根目录找文件，即宣传页；
+  - 其余所有路径 → `app/` 目录，找不到文件回落 `index.html`（客户端路由）；
+  - 统一加 `X-Content-Type-Options`、`Referrer-Policy`、`X-Frame-Options` 安全头。
+
+### 3.5 校验并重载 Caddy
+
+**不要跳过校验。** 配置写错时 `reload` 会失败；先 `validate` 能看到具体错误行。
+
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "docker exec adeer-caddy-1 caddy validate --config /etc/caddy/Caddyfile"
+```
+
+看到 `Valid configuration` 后再重载：
+
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "docker exec adeer-caddy-1 caddy reload --config /etc/caddy/Caddyfile"
+```
+
+若 `validate` 报错，把报错行对照 `deploy/Caddyfile.prepdot` 检查；不要重载，先修好文件。
+如果 `reload` 后站点异常，回到 [3.2](#32-备份现有-caddyfile) 用备份文件覆盖回来再 reload。
+
+> 本仓库开发机上没有安装 `caddy`，所以 `deploy/Caddyfile.prepdot` 没有在本地校验过。
+> **每次改动后都必须在服务器上执行上面的 `caddy validate`，通过后再 reload。**
+
+### 3.6 第一次发布 Web 应用
+
+在本地仓库根目录（或在 `prepdot-web/` 下）执行：
+
+```bash
+cd prepdot-web
+./scripts/deploy-web.sh
+```
+
+脚本会依次：安装依赖 → `lint` → 构建 → 询问确认 → 检查服务器 rsync →
+上传到 `app.new/` → 切换目录 → 做线上健康检查。第一次执行时它还会顺手完成
+"旧落地页移入 `welcome/`"的兜底操作。
+
+### 3.7 验证首次部署
+
+```bash
+curl -fsS https://prepdot.site/api/health
+curl -fsSI https://prepdot.site/
+curl -fsSI https://prepdot.site/welcome/
+curl -fsSI https://prepdot.site/review
+```
+
+期望：
+
+- `/api/health` 返回 `{"code":0,...}` 之类的成功 JSON（具体字段以接口为准）；
+- `/` 和 `/review` 返回 `200`，`Content-Type: text/html`（后者验证刷新深链不 404）；
+- `/welcome/` 返回 `200`，内容仍是原来的宣传/法律页。
+
+再用浏览器打开 <https://prepdot.site>，能正常登录并看到复习页即完成。
+
+---
+
+## 4. 日常发布
+
+改了 `prepdot-web/` 的代码后，在本地执行：
+
+```bash
+cd prepdot-web
+./scripts/deploy-web.sh
+```
+
+或在仓库根目录：
+
+```bash
+prepdot-web/scripts/deploy-web.sh
+```
+
+脚本会先跑 `pnpm install --frozen-lockfile`、`pnpm lint`、`pnpm build`，**构建失败就不会上传**。
+确认提示输入 `y` 后开始发布。
+
+需要跳过确认（例如自动化）时：
+
+```bash
+YES=1 ./scripts/deploy-web.sh
+# 或
+./scripts/deploy-web.sh --yes
+```
+
+可用的环境变量：
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `PREPDOT_SSH_HOST` | `ubuntu@62.234.146.153` | 目标服务器 |
+| `PREPDOT_SSH_KEY` | `~/.ssh/id_ed25519` | SSH 私钥路径 |
+| `YES` | 未设置 | `1` 时跳过确认 |
+
+脚本的发布过程是"近似原子"的：
+
+1. 上传到 `app.new/`，此时线上仍读旧的 `app/`；
+2. 把旧的 `app/` 改名为 `app.prev/`，再把 `app.new/` 改名为 `app/`（两次 `mv`，间隔极短）；
+3. 执行线上健康检查。
+
+如果第 2 步之后检查失败，脚本会打印回滚命令。目录结构：
+
+```text
+/opt/adeer/legal/prepdot-site/
+├── app/       当前线上版本（每次发布被整体替换）
+├── app.prev/  上一版，用于回滚（下一次发布会覆盖它）
+├── app.new/   上传暂存区（发布过程中存在）
+└── welcome/   宣传/法律落地页，长期保留
+```
+
+---
+
+## 5. 回滚
+
+### 5.1 回滚 Web 前端（最常见）
+
+发布后发现问题，把 `app.prev/` 换回来即可，**不需要重新构建**：
+
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "cd /opt/adeer/legal/prepdot-site && \
+   ls -ld app app.prev && \
+   rm -rf app.failed && \
+   mv app app.failed && \
+   mv app.prev app && \
+   ls -ld app app.failed"
+```
+
+执行后刷新 <https://prepdot.site> 即可看到上一版。`app.failed/` 是这次出问题的版本，
+确认不需要排查后可以删除：
+
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "rm -rf /opt/adeer/legal/prepdot-site/app.failed"
+```
+
+注意：`app.prev/` 只保留**上一版**。如果连续发布了两次，第一次的版本已经不存在了。
+
+如果健康检查失败、脚本已打印回滚命令，直接复制执行即可（脚本输出里的命令与上面等价）。
+
+### 5.2 回滚 Caddy 配置
+
+如果问题出在反向代理配置（例如改了 Caddyfile 后站点打不开）：
+
+```bash
+# 1. 看一眼备份文件名
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "ls -l /opt/adeer/Caddyfile*"
+
+# 2. 用备份覆盖（把文件名换成实际备份）
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "sudo cp /opt/adeer/Caddyfile.bak.20261101-120000 /opt/adeer/Caddyfile"
+
+# 3. 校验 + 重载
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "docker exec adeer-caddy-1 caddy validate --config /etc/caddy/Caddyfile"
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  "docker exec adeer-caddy-1 caddy reload --config /etc/caddy/Caddyfile"
+```
+
+重载后访问 <https://api.prepdot.site/api/health> 与 <https://prepdot.site> 确认恢复。
+
+---
+
+## 6. 演示账号与每日重置
+
+生产环境提供一个公开的演示账号，方便访客直接体验。为了避免访客把演示数据改乱，
+服务器上有一个重置脚本，由 cron 每天凌晨自动恢复初始状态：
+
+| 项目 | 值 |
+|---|---|
+| 脚本路径 | `/opt/prepdot/demo/reset-demo.sh` |
+| 执行时间 | 每天 04:17（服务器本地时区，Asia/Shanghai） |
+| cron 表达式 | `17 4 * * *` |
+| 作用 | 把演示账号的数据恢复到干净的初始状态，清除访客新增或修改的内容 |
+
+> 该脚本会在后续步骤中安装。本文先固定路径与时间约定；安装完成后，
+> 可以用下面两条命令确认它确实在跑：
+>
+> ```bash
+> ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 "ls -l /opt/prepdot/demo/reset-demo.sh"
+> ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 "crontab -l | grep reset-demo"
+> ```
+>
+> 演示账号的用户名/密码由后端初始化数据决定，不在本仓库与本文中记录，避免泄露。
+> 当前阶段该脚本尚未部署，属正常现象。
+
+---
+
+## 7. 验证命令速查
+
+```bash
+# 后端健康（同源，走 prepdot.site 的 Caddy 转发）
+curl -fsS https://prepdot.site/api/health
+
+# 独立 API 域名（iOS 使用）
+curl -fsS https://api.prepdot.site/api/health
+
+# 首页 / 前端深链（应返回 200 text/html）
+curl -fsSI https://prepdot.site/
+curl -fsSI https://prepdot.site/review
+
+# 宣传/法律页
+curl -fsSI https://prepdot.site/welcome/
+curl -fsSI https://prepdot.site/welcome   # 应 301 到 /welcome/
+
+# 首页 Content-Type（应为 text/html）
+curl -fsSI https://prepdot.site/ | grep -i content-type
+```
+
+---
+
+## 8. 常见问题
+
+### 刷新页面 404
+
+浏览器里点导航正常，但直接打开或刷新 `/review`、`/decks/1` 变成 404。
+
+- 原因：Caddy 没有用 `try_files {path} /index.html` 兜底，或新 Caddyfile 没有 reload。
+- 处理：确认服务器上的 Caddyfile 与仓库里 `deploy/Caddyfile.prepdot` 一致，再
+  `caddy validate` + `caddy reload`；用 `curl -fsSI https://prepdot.site/review` 验证返回 200。
+
+### API 返回 401
+
+- 通常是 token 过期或浏览器清了 localStorage：退出重新登录即可。
+- 如果**所有人**突然都 401：检查后端 `JWT_SECRET` 是否在最近一次后端发布中被换掉
+  （换 secret 会让全部旧 token 失效），确认后让用户重新登录。
+
+### 跨域（CORS）报错
+
+生产环境的 Web 端与 API 同源（都在 `prepdot.site` 下），**正常情况不会有跨域问题**。
+
+- 检查构建时是否误设置了 `VITE_API_BASE_URL`（它会把请求指向别的域名）；
+  生产构建应保持默认的 `/api`。必要时清掉该变量后重新发布。
+- Web 端不要直接调用 `https://api.prepdot.site`——那是给 iOS 用的独立域名。
+
+### 上传文件超限
+
+上传上限由后端 Spring 配置决定（`spring.servlet.multipart.max-file-size` /
+`max-request-size`，当前为 20MB），不是 Caddy 的限制。
+
+- 超限时后端返回错误，前端提示失败。需要调大时修改
+  `prepdot-backend/src/main/resources/application-production.yml`，走后端既有 CI 重新部署。
+- 注意：这与前端无关，也不需要改 Caddy。
+
+### AI 生成超时
+
+卡片生成走 Agent 流水线，最长可能需要约 **180 秒**。
+
+- 期间保持页面打开，不要反复刷新或重复点击；SSE 连接断开后重试即可。
+- 不要在 Caddy 上加很短的 `response_header_timeout` 之类限制（当前配置没有设，保持默认）。
+- 如果以后在站点前再加 CDN/防火墙，需要确认其超时时间大于 180 秒。
+
+### HTTPS 证书问题
+
+证书由 Caddy 自动申请与续期。
+
+- 确认 `prepdot.site`、`www.prepdot.site` 的 DNS 都解析到 `62.234.146.153`；
+- 确认服务器 80、443 端口可从公网访问（Let's Encrypt 校验要用 80 端口）；
+- 查看 Caddy 日志：`docker logs --tail 100 adeer-caddy-1`；
+- 证书有效期内会自动续期，不需要手动操作。
+
+### API 502 / 连不上后端
+
+- `docker ps` 看 `prepdot-backend` 是否在运行；
+- `docker logs --tail 100 prepdot-backend` 看启动报错；
+- 确认 Caddy 容器在 `prepdot_proxy` 网络中（见 3.1）。
+
+---
+
+## 9. 安全说明
+
+以下都是**明确的取舍**，上线前请知悉：
+
+1. **JWT 存在 localStorage**：Web 端登录凭证保存在浏览器 localStorage，没有使用
+   `HttpOnly` Cookie。好处是实现简单、与会话刷新逻辑一致；代价是如果页面发生 XSS，
+   脚本可以读取 token。项目因此不加载第三方统计/广告脚本，Markdown 渲染也做了限制。
+   这是当前阶段的已知取舍，后续若要做更严格的安全模型，需要改为 HttpOnly Cookie + CSRF 防护。
+2. **AI Key 为明文环境变量**：后端读取 `AI_DEEPSEEK_SYSTEM_KEY`，它来自服务器上的
+   `.env.production`，以明文形式存在并由 Docker 注入容器。不要把它提交进仓库；
+   服务器被入侵时该 key 会泄露，届时应在供应商后台吊销并轮换。
+3. **演示账号有额度**：演示账号消耗的是真实的 AI 额度，因此应保持较低的使用上限，
+   并由每日重置脚本清理数据，避免被滥用。
+4. **不要在前端写入任何密钥**：`prepdot-web/` 构建产物是公开可下载的，任何注入到
+   `VITE_*` 变量的内容都会出现在浏览器里。
+5. **发布脚本不含密钥**：`deploy-web.sh` 只使用本机 SSH 私钥路径与目标地址，
+   不包含密码或 token。
+
+---
+
+## 10. 边界
+
+- **不改 iOS**：`prepdot-ios/` 与 `api.prepdot.site` 的行为保持不变。
+- **不改后端接口**：本阶段 Web 端复用现有 `/api`，Caddy 只做路径转发。
+- **桌面端（Phase 2）尚未开始**：后续才会确定 Tauri/Electron 方案与部署方式。

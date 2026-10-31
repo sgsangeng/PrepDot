@@ -19,19 +19,46 @@
 | 端 | 技术 |
 |---|---|
 | 后端 | Java 17、Spring Boot 3.3.4、MyBatis-Plus、MySQL 8、Flyway、JWT（滑动续期）、SSE |
-| 客户端 | SwiftUI（iPhone / iPad）、Charts、NavigationSplitView + OutlineGroup |
-| 部署 | GitHub Actions → Docker Compose（服务器本机构建）→ Caddy 反代 HTTPS |
+| 客户端 | iOS：SwiftUI（iPhone / iPad）、Charts、NavigationSplitView + OutlineGroup；Web：Vue 3、Vite、TypeScript |
+| 部署 | GitHub Actions → Docker Compose（服务器本机构建）→ Caddy 反代 HTTPS；Web 静态站点由 Caddy 直接提供 |
 
 ## 项目结构
 
 ```text
 prepdot-backend/    Spring Boot 后端（含 Flyway 迁移与单元测试）
 prepdot-ios/        SwiftUI 客户端（PreDot/PrepDot.xcodeproj）
-deploy/             Caddy 反代配置
+prepdot-web/        Web 客户端（Vue 3 + Vite + TypeScript，Phase 1）
+deploy/             Caddy 反代配置（api.prepdot.site 与 Web 站点）
 docs/               FSRS 设计与实现计划、简历技术要点
 prepdot.sh          本地一键启动脚本
 docker-compose.production.yml   生产编排（MySQL + 后端，三网络隔离）
 ```
+
+## 多端架构
+
+| 端 | 状态 | 技术 / 地址 |
+|---|---|---|
+| iOS | 线上运行 | SwiftUI（iPhone / iPad），API `https://api.prepdot.site` |
+| Web | Phase 1 已完成 | Vue 3 + Vite + TypeScript，<https://prepdot.site> |
+| 桌面端 | Phase 2 尚未开始 | macOS / Windows；Tauri 或 Electron 方案待定 |
+
+`prepdot-web/` 常用命令（需要 Node.js 与 pnpm）：
+
+```bash
+cd prepdot-web
+pnpm install    # 安装依赖
+pnpm dev        # 本地开发，默认 http://localhost:5173
+pnpm test       # Vitest 单元测试
+pnpm build      # 类型检查并构建到 dist/
+pnpm lint       # ESLint
+pnpm e2e        # Playwright 端到端测试
+```
+
+开发模式下 `/api` 会被代理到 `http://127.0.0.1:8080`（可用 `VITE_DEV_API_TARGET` 覆盖）；
+生产环境 Web 与 API 同源，均由 Caddy 反代。Web 端的首次部署、日常发布、回滚与常见问题见
+[DEPLOY-WEB.md](DEPLOY-WEB.md)。
+
+Web 端复用现有后端接口，不改变 iOS 端行为；桌面端（Phase 2）尚未开始。
 
 ## 本地启动
 
