@@ -19,6 +19,14 @@ export const useCoachStore = defineStore('coach', () => {
   const sessions = ref<CoachSession[]>([])
   const currentId = ref('')
   const loaded = ref(false)
+  /**
+   * 进行中的请求状态放在 store 而不是页面里：页面切换（无 KeepAlive）会卸载
+   * CoachPage，但 store 是单例，重新挂载后仍能立即看到进行中的请求并维持禁用态。
+   * 仅存活于当前应用会话，刷新页面后重置（无需持久化）。
+   */
+  const thinking = ref(false)
+  const progress = ref('')
+  const pendingSessionId = ref('')
 
   const orderedSessions = computed(() =>
     [...sessions.value].sort((a, b) => b.updatedAt - a.updatedAt)
@@ -46,6 +54,26 @@ export const useCoachStore = defineStore('coach', () => {
 
   function nextMessageId(): string {
     return makeMessageId(now(), messageSeq++)
+  }
+
+  /** 标记一次请求开始；`sessionId` 记录回复应归档到的会话。 */
+  function beginRun(sessionId: string): void {
+    pendingSessionId.value = sessionId
+    thinking.value = true
+    progress.value = '正在连接学习教练…'
+  }
+
+  /** 更新流式进度；请求已结束时忽略迟到的进度事件。 */
+  function setProgress(text: string): void {
+    if (!thinking.value) return
+    progress.value = text
+  }
+
+  /** 请求结束（无论成功、失败还是页面已卸载），解除全局禁用态。 */
+  function finishRun(): void {
+    thinking.value = false
+    progress.value = ''
+    pendingSessionId.value = ''
   }
 
   function mostRecentId(items: readonly CoachSession[]): string {
@@ -133,12 +161,18 @@ export const useCoachStore = defineStore('coach', () => {
     currentId,
     messages,
     loaded,
+    thinking,
+    progress,
+    pendingSessionId,
     load,
     newSession,
     switchSession,
     deleteSession,
     addMessage,
     nextMessageId,
+    beginRun,
+    setProgress,
+    finishRun,
     persist
   }
 })

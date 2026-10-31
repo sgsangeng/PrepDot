@@ -149,4 +149,38 @@ describe('coach store', () => {
     const firstSession = store.sessions.find(s => s.id === first)
     expect(firstSession?.messages).toHaveLength(1)
   })
+
+  it('keeps an in-flight run observable across page remounts and clears it when settled', async () => {
+    const storage = memoryStorage()
+    setup(storage.port)
+    const store = useCoachStore()
+    await store.load()
+    const id = store.currentId
+
+    store.beginRun(id)
+    expect(store.thinking).toBe(true)
+    expect(store.progress).toBe('正在连接学习教练…')
+    expect(store.pendingSessionId).toBe(id)
+
+    store.setProgress('正在执行工具：复习趋势统计')
+    expect(store.progress).toBe('正在执行工具：复习趋势统计')
+
+    // 路由切换不会重建 Pinia：重新挂载的页面立即看到同一段进行中状态。
+    await store.load()
+    const remounted = useCoachStore()
+    expect(remounted.thinking).toBe(true)
+    expect(remounted.progress).toBe('正在执行工具：复习趋势统计')
+    expect(remounted.pendingSessionId).toBe(id)
+
+    // 成功与失败都会在 finally 中调用 finishRun。
+    remounted.finishRun()
+    expect(remounted.thinking).toBe(false)
+    expect(remounted.progress).toBe('')
+    expect(remounted.pendingSessionId).toBe('')
+
+    // 结束后迟到的进度事件不会重新点亮进度行。
+    remounted.setProgress('迟到的进度')
+    expect(remounted.thinking).toBe(false)
+    expect(remounted.progress).toBe('')
+  })
 })

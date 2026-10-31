@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* global HTMLElement, KeyboardEvent, MouseEvent */
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import {
   ArrowUp,
   ChevronRight,
@@ -39,8 +39,9 @@ const quickQuestions = [
 
 const store = useCoachStore()
 const loading = ref(true)
-const thinking = ref(false)
-const progress = ref('')
+// 进行中状态存放在 store：页面被路由切走再挂载回来时仍能立即看到进度并保持禁用。
+const thinking = computed(() => store.thinking)
+const progress = computed(() => store.progress)
 const input = ref('')
 const listEl = ref<HTMLElement | null>(null)
 
@@ -94,7 +95,7 @@ async function requestRun(text: string): Promise<AgentRun> {
   let run: AgentRun | null = null
   const parser = createSseParser((event) => {
     if (event.event === 'progress') {
-      progress.value = localizeProgress(event.data)
+      store.setProgress(localizeProgress(event.data))
       return
     }
     if (event.event === 'result') {
@@ -141,8 +142,7 @@ async function send(raw: string): Promise<void> {
   if (!sessionId) return
 
   input.value = ''
-  thinking.value = true
-  progress.value = '正在连接学习教练…'
+  store.beginRun(sessionId)
   try {
     await store.addMessage(sessionId, {
       id: store.nextMessageId(),
@@ -160,8 +160,7 @@ async function send(raw: string): Promise<void> {
       })
     }
   } finally {
-    thinking.value = false
-    progress.value = ''
+    store.finishRun()
   }
 }
 
