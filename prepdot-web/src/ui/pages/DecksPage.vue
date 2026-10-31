@@ -358,7 +358,19 @@ onMounted(() => {
           />
           返回知识树
         </button>
-        <DeckDetailPage :deck-id="selectedDeckId" />
+        <ErrorState
+          v-if="loadError"
+          class="detail-load-error"
+          title="卡组加载失败"
+          :message="loadError"
+          retry-text="重新加载"
+          show-retry
+          @retry="loadDecks()"
+        />
+        <DeckDetailPage
+          v-else
+          :deck-id="selectedDeckId"
+        />
       </section>
     </div>
 
@@ -614,6 +626,11 @@ onMounted(() => {
   }
 
   .back-btn {
+    display: none;
+  }
+
+  /* 桌面端错误已由左侧列表展示，避免双栏重复。 */
+  .detail-load-error {
     display: none;
   }
 }
