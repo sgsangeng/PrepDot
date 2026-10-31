@@ -135,6 +135,22 @@ function toggleExpanded(id: number): void {
   expandedIds.value = next
 }
 
+/**
+ * 卡片增删改后刷新卡组统计，但不清空详情里的卡片列表。
+ * 与 loadDecks 共用 loadSeq：若期间有更新的树刷新，以那次结果为准。
+ */
+async function refreshDecksSilently(): Promise<void> {
+  const seq = loadSeq
+  try {
+    const loaded = await getRuntime().endpoints.decks()
+    if (seq !== loadSeq) return
+    decks.value = loaded
+  } catch (e) {
+    if (seq !== loadSeq) return
+    toast.show(`卡组统计刷新失败：${friendlyError(e)}`)
+  }
+}
+
 function goGraph(): void {
   void router.push({ name: 'graph' })
 }
@@ -432,6 +448,9 @@ onMounted(() => {
         <DeckDetailPage
           v-else
           :deck-id="selectedDeckId"
+          :decks="decks"
+          :decks-loading="loading"
+          @refresh-decks="refreshDecksSilently"
         />
       </section>
     </div>

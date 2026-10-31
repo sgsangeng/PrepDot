@@ -21,16 +21,18 @@ import { ApiError, friendlyError } from '@/core/errors'
 import { getRuntime } from '@/runtime'
 import { useToastStore } from '@/ui/stores/toast'
 
-const props = defineProps<{ deckId?: number | null }>()
+const props = defineProps<{ deckId?: number | null; decks?: Deck[]; decksLoading?: boolean }>()
+const emit = defineEmits<{ refreshDecks: [] }>()
 
 const router = useRouter()
 const toast = useToastStore()
 
-const decks = ref<Deck[]>([])
+/** 独立使用时自行拉取；由知识树传入时直接复用父级列表，避免重复 `/decks` 请求和旧数据。 */
+const fetchedDecks = ref<Deck[]>([])
 const cards = ref<Flashcard[]>([])
 const loading = ref(false)
 const loadError = ref('')
-const missing = ref(false)
+const notFound = ref(false)
 
 const isManaging = ref(false)
 const selectedIds = ref<Set<number>>(new Set())
@@ -45,14 +47,24 @@ const deleteError = ref('')
 let loadSeq = 0
 let statsSeq = 0
 
+const deckList = computed<Deck[]>(() => props.decks ?? fetchedDecks.value)
+const waitingForTree = computed(() =>
+  props.decks !== undefined && props.decksLoading === true && deckList.value.length === 0
+)
+
 const deck = computed<Deck | null>(() => {
   if (props.deckId == null) return null
-  return decks.value.find(item => item.id === props.deckId) ?? null
+  return deckList.value.find(item => item.id === props.deckId) ?? null
 })
 const childDecks = computed(() =>
-  props.deckId == null ? [] : decks.value.filter(item => item.parentId === props.deckId)
+  props.deckId == null ? [] : deckList.value.filter(item => item.parentId === props.deckId)
 )
 const isLeaf = computed(() => childDecks.value.length === 0)
+const missing = computed(() => {
+  if (props.deckId == null || waitingForTree.value) return false
+  if (notFound.value) return true
+  return !deckList.value.some(item => item.id === props.deckId)
+})
 
 const selectedCount = computed(() => selectedIds.value.size)
 const allSelected = computed(() => cards.value.length > 0 && selectedIds.value.size === cards.value.length)
@@ -74,30 +86,28 @@ async function load(): Promise<void> {
   const id = props.deckId
   const seq = ++loadSeq
   if (id == null) {
-    decks.value = []
+    fetchedDecks.value = []
     cards.value = []
     loadError.value = ''
-    missing.value = false
     loading.value = false
     return
   }
   loading.value = true
   loadError.value = ''
-  missing.value = false
+  notFound.value = false
   try {
-    const [deckList, cardList] = await Promise.all([
-      getRuntime().endpoints.decks(),
+    const [remoteDecks, cardList] = await Promise.all([
+      props.decks === undefined ? getRuntime().endpoints.decks() : Promise.resolve(null),
       getRuntime().endpoints.cards(id, false)
     ])
     if (seq !== loadSeq) return
-    decks.value = deckList
+    if (remoteDecks !== null) fetchedDecks.value = remoteDecks
     cards.value = cardList
-    missing.value = !deckList.some(item => item.id === id)
     const valid = new Set(cardList.map(card => card.id))
     selectedIds.value = new Set([...selectedIds.value].filter(cardId => valid.has(cardId)))
   } catch (e) {
     if (seq !== loadSeq) return
-    if (e instanceof ApiError && e.code === 404) missing.value = true
+    if (e instanceof ApiError && e.code === 404) notFound.value = true
     else loadError.value = friendlyError(e)
   } finally {
     if (seq === loadSeq) loading.value = false
@@ -111,11 +121,16 @@ async function load(): Promise<void> {
 async function refreshDeckStats(failureMessage: string): Promise<void> {
   const id = props.deckId
   if (id == null) return
+  // 共享知识树状态时交给父级刷新，新列表通过 props 回流，卡片列表不受影响。
+  if (props.decks !== undefined) {
+    emit('refreshDecks')
+    return
+  }
   const seq = ++statsSeq
   try {
-    const deckList = await getRuntime().endpoints.decks()
+    const remoteDecks = await getRuntime().endpoints.decks()
     if (seq !== statsSeq || props.deckId !== id) return
-    decks.value = deckList
+    fetchedDecks.value = remoteDecks
   } catch {
     if (seq !== statsSeq || props.deckId !== id) return
     toast.show(failureMessage)
@@ -258,7 +273,7 @@ function closeForm(): void {
     </div>
 
     <div
-      v-else-if="loading"
+      v-else-if="loading || waitingForTree"
       class="state-card"
     >
       <LoadingState text="正在加载卡片…" />
@@ -461,6 +476,7 @@ function closeForm(): void {
       v-if="showForm && deck"
       :key="editingCard?.id ?? 'new'"
       :deck-id="deck.id"
+      :deck-category="deck.category"
       :card="editingCard ?? undefined"
       @saved="onSaved"
       @close="closeForm"
