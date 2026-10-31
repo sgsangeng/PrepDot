@@ -9,8 +9,21 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => user.value !== null)
   let restored = false
   let restoring: Promise<void> | null = null
+  let listening = false
+
+  /** 401 被动登出后同步 Pinia 状态，App.vue 才能切回登录页。 */
+  function listenForUnauthorized(): void {
+    if (listening) return
+    listening = true
+    getRuntime().session.onUnauthorizedChange(() => {
+      user.value = null
+      restored = true
+      ready.value = true
+    })
+  }
 
   async function restore(): Promise<void> {
+    listenForUnauthorized()
     if (restored) {
       // ApiClient 遇到 401 会让 AuthSession 自行登出；下次导航时同步清掉 store 中的旧用户，
       // 避免界面停留在「已登录」状态而守卫又不再读取存储。
@@ -23,7 +36,9 @@ export const useAuthStore = defineStore('auth', () => {
       // 避免后来的守卫在恢复完成前误判为未登录。
       restoring = (async () => {
         try {
-          user.value = await getRuntime().session.restore()
+          const restoredUser = await getRuntime().session.restore()
+          // 恢复期间若发生 401 被动登出，不要把旧用户写回 store。
+          user.value = getRuntime().session.isAuthenticated ? restoredUser : null
         } catch {
           user.value = null
         } finally {
@@ -37,10 +52,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function login(username: string, password: string): Promise<void> {
+    listenForUnauthorized()
     user.value = await getRuntime().session.login(username, password)
   }
 
   async function register(username: string, password: string, nickname: string): Promise<void> {
+    listenForUnauthorized()
     user.value = await getRuntime().session.register(username, password, nickname)
   }
 

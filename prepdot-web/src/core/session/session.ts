@@ -16,6 +16,7 @@ export class AuthSession implements TokenProvider {
   private token: string | null = null
   private user: AuthUser | null = null
   private refreshing: Promise<void> | null = null
+  private readonly unauthorizedHandlers = new Set<() => void>()
 
   constructor(
     private readonly storage: StoragePort,
@@ -118,7 +119,19 @@ export class AuthSession implements TokenProvider {
     return this.refreshing
   }
 
-  async onUnauthorized(): Promise<void> { await this.logout() }
+  /**
+   * 订阅「被动登出」（如任意请求返回 401）事件。返回取消订阅函数。
+   * 手动 logout() 不触发，避免调用方自己清理状态时重复处理。
+   */
+  onUnauthorizedChange(handler: () => void): () => void {
+    this.unauthorizedHandlers.add(handler)
+    return () => { this.unauthorizedHandlers.delete(handler) }
+  }
+
+  async onUnauthorized(): Promise<void> {
+    await this.logout()
+    for (const handler of this.unauthorizedHandlers) handler()
+  }
 
   async logout(): Promise<void> {
     this.token = null

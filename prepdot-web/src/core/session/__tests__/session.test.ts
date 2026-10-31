@@ -197,4 +197,54 @@ describe('AuthSession.onUnauthorized', () => {
     expect(storage.data['prepdot.token']).toBeUndefined()
     expect(storage.data['prepdot.user']).toBeUndefined()
   })
+
+  it('invokes unauthorized listeners after the session is cleared', async () => {
+    const token = expiringIn(10)
+    const storage = memoryStorage(storedSession(token))
+    const session = new AuthSession(storage, httpUnavailable(), clockAt(NOW))
+    await session.restore()
+
+    const observed: boolean[] = []
+    session.onUnauthorizedChange(() => {
+      observed.push(session.isAuthenticated)
+    })
+
+    await session.onUnauthorized()
+
+    expect(observed).toEqual([false])
+  })
+
+  it('stops invoking a listener after it unsubscribes', async () => {
+    const token = expiringIn(10)
+    const storage = memoryStorage(storedSession(token))
+    const session = new AuthSession(storage, httpUnavailable(), clockAt(NOW))
+    await session.restore()
+
+    let calls = 0
+    const unsubscribe = session.onUnauthorizedChange(() => {
+      calls += 1
+    })
+    unsubscribe()
+
+    await session.onUnauthorized()
+
+    expect(calls).toBe(0)
+  })
+
+  it('does not invoke listeners on manual logout', async () => {
+    // 手动登出由 auth store 自己清空用户；监听器只服务于 401 这类被动登出。
+    const token = expiringIn(10)
+    const storage = memoryStorage(storedSession(token))
+    const session = new AuthSession(storage, httpUnavailable(), clockAt(NOW))
+    await session.restore()
+
+    let calls = 0
+    session.onUnauthorizedChange(() => {
+      calls += 1
+    })
+
+    await session.logout()
+
+    expect(calls).toBe(0)
+  })
 })
