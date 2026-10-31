@@ -5,7 +5,7 @@ import {
   ArrowLeft,
   FolderPlus,
   Library,
-  Map,
+  Map as MapIcon,
   Plus,
   Search,
   Sparkles,
@@ -20,7 +20,7 @@ import CreateDeckSheet from '@/ui/sheets/CreateDeckSheet.vue'
 import EditDeckSheet from '@/ui/sheets/EditDeckSheet.vue'
 import DeckDetailPage from './DeckDetailPage.vue'
 import type { Deck } from '@/core/api/types'
-import { buildDeckTree, filterDeckTree, type DeckNode } from '@/core/decks/tree'
+import { buildDeckTree, descendantIds, filterDeckTree, type DeckNode } from '@/core/decks/tree'
 import { friendlyError } from '@/core/errors'
 import { getRuntime } from '@/runtime'
 import { useToastStore } from '@/ui/stores/toast'
@@ -41,6 +41,7 @@ const pendingDelete = ref<Deck | null>(null)
 const deleting = ref(false)
 const deleteError = ref('')
 let seededExpansion = false
+let loadSeq = 0
 
 /** 路由里的 deck id：Number 解析失败（NaN/非正整数）时视为未选择。 */
 const selectedDeckId = computed<number | null>(() => {
@@ -53,6 +54,15 @@ const selectedDeckId = computed<number | null>(() => {
 
 const tree = computed(() => filterDeckTree(buildDeckTree(decks.value), query.value))
 const searching = computed(() => query.value.trim() !== '')
+
+const deleteDescendantCount = computed(() =>
+  pendingDelete.value ? descendantIds(pendingDelete.value.id, decks.value).size : 0
+)
+const deleteMessage = computed(() =>
+  deleteDescendantCount.value > 0
+    ? `删除后该卡组、其 ${deleteDescendantCount.value} 个子卡组及所有卡片将无法恢复。`
+    : '删除后该卡组及其卡片将无法恢复。'
+)
 
 function seedExpansion(nodes: DeckNode[]): void {
   const next = new Set(expandedIds.value)
@@ -68,19 +78,53 @@ function seedExpansion(nodes: DeckNode[]): void {
   expandedIds.value = next
 }
 
+/** 展开从 parentId 起的整条父链，保证新建/移动后的节点在树中可见。 */
+function expandAncestors(parentId: number | null, list: Deck[]): void {
+  if (parentId == null) return
+  const byId = new Map<number, Deck>(list.map(item => [item.id, item]))
+  const next = new Set(expandedIds.value)
+  const seen = new Set<number>()
+  let current: Deck | undefined = byId.get(parentId)
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id)
+    next.add(current.id)
+    current = current.parentId == null ? undefined : byId.get(current.parentId)
+  }
+  expandedIds.value = next
+}
+
 async function loadDecks(showLoading = true): Promise<void> {
+  const seq = ++loadSeq
   if (showLoading) loading.value = true
   loadError.value = ''
   try {
-    decks.value = await getRuntime().endpoints.decks()
-    if (!seededExpansion) {
-      seedExpansion(buildDeckTree(decks.value))
+    const loaded = await getRuntime().endpoints.decks()
+    // 只接受最新一次请求，避免重试/变更刷新乱序覆盖新列表。
+    if (seq !== loadSeq) return
+    decks.value = loaded
+
+    // 首次拿到非空列表时展开含子节点的分支；首次为空也不会阻止后续种子化。
+    if (!seededExpansion && loaded.length > 0) {
+      seedExpansion(buildDeckTree(loaded))
       seededExpansion = true
     }
+
+    const selected = selectedDeckId.value
+    if (selected != null) {
+      const selectedDeck = loaded.find(item => item.id === selected)
+      if (selectedDeck) {
+        expandAncestors(selectedDeck.parentId, loaded)
+      } else {
+        // 选中的卡组已不存在（可能被其他端删除）：回到列表，避免详情停留在陈旧数据。
+        void router.replace({ name: 'decks' })
+      }
+    }
   } catch (e) {
+    if (seq !== loadSeq) return
     loadError.value = friendlyError(e)
   } finally {
-    if (showLoading) loading.value = false
+    // 最新请求结束时统一收尾；后台刷新（showLoading=false）不会让加载态卡住。
+    if (seq === loadSeq) loading.value = false
   }
 }
 
@@ -96,7 +140,17 @@ function goGraph(): void {
 }
 
 function closeDetail(): void {
-  void router.push({ name: 'decks' })
+  // 若上一页就是知识树，直接后退，避免在历史里堆积重复的列表项。
+  const listHref = router.resolve({ name: 'decks' }).href
+  const back = (router.options.history.state as { back?: unknown }).back
+  if (
+    typeof back === 'string'
+    && (back === listHref || back.startsWith(`${listHref}?`) || back.startsWith(`${listHref}#`))
+  ) {
+    router.back()
+    return
+  }
+  void router.replace({ name: 'decks' })
 }
 
 function openCreate(): void {
@@ -117,12 +171,16 @@ function goCommunity(): void {
 function onCreated(deck: Deck): void {
   showCreate.value = false
   toast.show(`已创建「${deck.title}」`)
+  // 展开父链，让新建节点立刻出现在视野内。
+  expandAncestors(deck.parentId, decks.value)
   void loadDecks(false)
 }
 
 function onEdited(deck: Deck): void {
   editingDeck.value = null
   toast.show(`已保存「${deck.title}」`)
+  // 节点可能被移动到折叠的父卡组下，同样展开父链。
+  expandAncestors(deck.parentId, decks.value)
   void loadDecks(false)
 }
 
@@ -144,10 +202,14 @@ async function confirmDelete(): Promise<void> {
   deleting.value = true
   deleteError.value = ''
   try {
+    // 后端为 ON DELETE CASCADE：选中节点自身或其后代被删时都要立刻离开详情。
+    const selection = selectedDeckId.value
+    const affectsSelection = selection !== null
+      && (selection === deck.id || descendantIds(deck.id, decks.value).has(selection))
     await getRuntime().endpoints.deleteDeck(deck.id)
     pendingDelete.value = null
     toast.show(`已删除「${deck.title}」`)
-    if (selectedDeckId.value === deck.id) {
+    if (affectsSelection) {
       await router.replace({ name: 'decks' })
     }
     await loadDecks(false)
@@ -171,7 +233,7 @@ onMounted(() => {
         type="button"
         @click="goGraph"
       >
-        <Map
+        <MapIcon
           :size="18"
           aria-hidden="true"
         />
@@ -393,7 +455,7 @@ onMounted(() => {
     <ConfirmDialog
       v-if="pendingDelete"
       :title="`删除「${pendingDelete.title}」？`"
-      message="删除后该卡组及其卡片将无法恢复。"
+      :message="deleteMessage"
       confirm-text="删除"
       :busy="deleting"
       :error="deleteError"

@@ -57,7 +57,10 @@ describe('deck tree edge cases', () => {
     expect(filterDeckTree(roots, '   ')).toBe(roots)
   })
 
-  it('dedupes descendants in a cycle', () => {
-    expect([...descendantIds(1, [deck(1, null), deck(2, 1), deck(3, 2), { ...deck(1, 3), id: 4 }])]).toEqual([2, 3, 4])
+  it('collects descendants without duplicates when parent links form a cycle', () => {
+    // 1→2→4→1：从 2 出发会绕回自身；每个后代只应出现一次。
+    const result = [...descendantIds(2, [deck(1, 4), deck(2, 1), deck(4, 2)])]
+    expect(result).toEqual([4, 1])
+    expect(new Set(result).size).toBe(result.length)
   })
 })
