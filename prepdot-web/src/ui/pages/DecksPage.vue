@@ -42,6 +42,7 @@ const deleting = ref(false)
 const deleteError = ref('')
 let seededExpansion = false
 let loadSeq = 0
+let refreshSeq = 0
 
 /** 路由里的 deck id：Number 解析失败（NaN/非正整数）时视为未选择。 */
 const selectedDeckId = computed<number | null>(() => {
@@ -137,16 +138,16 @@ function toggleExpanded(id: number): void {
 
 /**
  * 卡片增删改后刷新卡组统计，但不清空详情里的卡片列表。
- * 与 loadDecks 共用 loadSeq：若期间有更新的树刷新，以那次结果为准。
+ * 使用独立的递增序号，保证并发刷新时只有最后一次结果生效。
  */
 async function refreshDecksSilently(): Promise<void> {
-  const seq = loadSeq
+  const seq = ++refreshSeq
   try {
     const loaded = await getRuntime().endpoints.decks()
-    if (seq !== loadSeq) return
+    if (seq !== refreshSeq) return
     decks.value = loaded
   } catch (e) {
-    if (seq !== loadSeq) return
+    if (seq !== refreshSeq) return
     toast.show(`卡组统计刷新失败：${friendlyError(e)}`)
   }
 }

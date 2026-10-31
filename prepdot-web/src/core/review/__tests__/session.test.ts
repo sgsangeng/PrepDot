@@ -14,13 +14,22 @@ describe('review session', () => {
     expect(advanceReview(0, 1)).toEqual({ index: 0, done: true })
   })
 
-  it('reloads the plan instead of finishing when again empties the local queue', () => {
-    expect(advanceAfterRating(2, 3, 'again')).toEqual({ index: 2, done: true, reload: true })
-    expect(advanceAfterRating(0, 1, 'again')).toEqual({ index: 0, done: true, reload: true })
-    // 中间卡片保持 iOS 流程：直接切到下一张，不触发刷新。
-    expect(advanceAfterRating(0, 3, 'again')).toEqual({ index: 1, done: false, reload: false })
-    // 其它评分清空队列时仍直接进入完成页。
-    expect(advanceAfterRating(2, 3, 'good')).toEqual({ index: 2, done: true, reload: false })
+  it('reloads the plan whenever the local queue empties', () => {
+    expect(advanceAfterRating(2, 3)).toEqual({ index: 2, done: true, reload: true })
+    expect(advanceAfterRating(0, 1)).toEqual({ index: 0, done: true, reload: true })
+    // 中间卡片仍直接推进，不触发刷新。
+    expect(advanceAfterRating(0, 3)).toEqual({ index: 1, done: false, reload: false })
+  })
+
+  it('reloads after a middle again followed by a non-again finish', () => {
+    // 卡 1 评 again：本地继续到卡 2，但服务端仍保留卡 1 pending。
+    const first = advanceAfterRating(0, 3)
+    expect(first).toEqual({ index: 1, done: false, reload: false })
+    // 卡 2 用 good 推进到卡 3。
+    const second = advanceAfterRating(first.index, 3)
+    expect(second).toEqual({ index: 2, done: false, reload: false })
+    // 卡 3 用 good 清空本地队列，也必须刷新，否则会误报完成。
+    expect(advanceAfterRating(2, 3)).toEqual({ index: 2, done: true, reload: true })
   })
 
   it('exposes four ratings in iOS order', () => {

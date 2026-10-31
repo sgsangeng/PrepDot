@@ -164,19 +164,16 @@ async function submitRating(rating: ReviewRating): Promise<void> {
   lastRating.value = rating
   try {
     await getRuntime().endpoints.submitReview(card.id, rating)
-    const result = advanceAfterRating(index.value, cards.value.length, rating)
+    const result = advanceAfterRating(index.value, cards.value.length)
     if (!result.done) {
       index.value = result.index
       flipped.value = false
       showChat.value = false
       showEdit.value = false
       showNote.value = false
-    } else if (result.reload) {
-      // again 会把服务器计划项回置 pending；先确认服务器队列，避免误报「今日复习完成」。
-      await refreshRemainingQueue()
     } else {
-      mode.value = 'done'
-      void loadSummary()
+      // 本地队列清空不代表服务端完成：之前评过 again 的卡片仍可能是 pending。
+      await refreshRemainingQueue()
     }
     lastRating.value = null
   } catch (e) {
@@ -187,7 +184,7 @@ async function submitRating(rating: ReviewRating): Promise<void> {
 }
 
 /**
- * again 清空本地队列后重新拉取今日计划。
+ * 本地队列清空后重新拉取今日计划。
  * 服务器还有卡片就继续复习（从新队列第一张开始），确实为空才进入完成页。
  */
 async function refreshRemainingQueue(): Promise<void> {
