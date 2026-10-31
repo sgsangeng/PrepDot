@@ -1,4 +1,5 @@
 import type { ApiRequest, HttpTransport, MultipartRequest, RawResponse } from '@/adapters/types'
+import { StreamRequestError } from '@/adapters/errors'
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
@@ -64,7 +65,7 @@ export function createHttpTransport(): HttpTransport {
         } catch {
           // 读取错误响应体失败时保留状态码信息即可。
         }
-        throw new Error(`流式请求失败（${res.status}）${detail ? `：${detail}` : ''}`)
+        throw new StreamRequestError(res.status, `流式请求失败（${res.status}）${detail ? `：${detail}` : ''}`)
       }
       const reader = res.body.getReader()
       const decoder = new TextDecoder()

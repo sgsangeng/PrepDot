@@ -33,7 +33,9 @@ export function createApi(client: ApiClient) {
     createCard: (body: CardPayload) => client.request<Flashcard>({ method: 'POST', path: '/cards', body }),
     updateCard: (id: number, body: CardPayload) => client.request<Flashcard>({ method: 'PUT', path: `/cards/${id}`, body }),
     deleteCard: (id: number) => client.request<void>({ method: 'DELETE', path: `/cards/${id}` }),
-    deleteCards: (ids: number[]) => client.request<void>({ method: 'DELETE', path: `/cards/batch?${ids.map(id => `ids=${id}`).join('&')}` }),
+    deleteCards: (ids: number[]) => ids.length === 0
+      ? Promise.resolve()
+      : client.request<void>({ method: 'DELETE', path: `/cards/batch?${ids.map(id => `ids=${id}`).join('&')}` }),
     updateCardNote: (id: number, note: string) => client.request<Flashcard>({ method: 'PUT', path: `/cards/${id}/note`, body: { note } }),
     todayPlan: () => client.request<TodayPlan>({ method: 'GET', path: '/plan/today' }),
     submitReview: (cardId: number, rating: string) => client.request<Flashcard>({ method: 'POST', path: '/plan/review', body: { cardId, rating } }),

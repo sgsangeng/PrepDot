@@ -2,10 +2,15 @@ import type { Clock, HttpTransport, StoragePort } from '@/adapters/types'
 import type { AuthUser } from '@/core/api/types'
 import { ApiError } from '@/core/errors'
 import type { TokenProvider } from '@/core/api/client'
-import { shouldRefresh } from '@/core/auth/token'
+import { expiresAt, shouldRefresh } from '@/core/auth/token'
 
 const TOKEN_KEY = 'prepdot.token'
 const USER_KEY = 'prepdot.user'
+
+/** 只有明确的鉴权失败才允许在恢复阶段登出；网络/5xx 不应清空会话。 */
+function isDefinitiveAuthFailure(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 401
+}
 
 export class AuthSession implements TokenProvider {
   private token: string | null = null
@@ -19,14 +24,34 @@ export class AuthSession implements TokenProvider {
   ) {}
 
   get currentUser(): AuthUser | null { return this.user }
-  get isAuthenticated(): boolean { return this.token !== null }
+  /** 鉴权状态要求 token 与用户缓存同时存在，避免「已登录但无用户」的半状态。 */
+  get isAuthenticated(): boolean { return this.token !== null && this.user !== null }
 
   async restore(): Promise<AuthUser | null> {
-    this.token = await this.storage.get(TOKEN_KEY)
+    const token = await this.storage.get(TOKEN_KEY)
+    if (!token) {
+      this.token = null
+      this.user = null
+      return null
+    }
+    this.token = token
     this.user = this.parseUser(await this.storage.get(USER_KEY))
-    if (!this.token) return null
-    if (shouldRefresh(this.token, this.clock.now())) {
-      try { await this.refresh() } catch { await this.logout() }
+    if (!this.user) {
+      // 缺 token 时上面已清空；有 token 但用户缓存缺失/损坏时保留 token 供重新登录复用，
+      // 清空内存用户并视为未登录（isAuthenticated 同时要求 token 与 user）。
+      return null
+    }
+    if (shouldRefresh(token, this.clock.now())) {
+      try {
+        await this.refresh()
+      } catch (error) {
+        const expired = expiresAt(token, this.clock.now()) <= this.clock.now()
+        if (isDefinitiveAuthFailure(error) || expired) {
+          await this.logout()
+        }
+        // 其余失败（网络/DNS/超时/5xx）保留 token 与缓存用户，
+        // 等第一次真实 API 返回 401 时再由 onUnauthorized 统一登出。
+      }
     }
     return this.user
   }
@@ -82,6 +107,9 @@ export class AuthSession implements TokenProvider {
         method: 'POST', path: '/auth/refresh',
         headers: { Authorization: `Bearer ${token}` }
       })
+      if (response.status === 401 || response.body.code === 401) {
+        throw new ApiError(401, response.body.message || '登录已失效，请重新登录')
+      }
       if (response.body.code !== 200 || !response.body.data) throw new ApiError(response.body.code, response.body.message)
       // 请求期间已登出或切换账号时丢弃过期响应，避免把旧会话写回存储。
       if (this.token !== token) return

@@ -13,4 +13,12 @@ describe('sse parser', () => {
       { event: 'result', data: '{"runId":1}' }
     ])
   })
+
+  it('normalizes CRLF split across chunk boundaries', () => {
+    const events: { event: string; data: string }[] = []
+    const feed = createSseParser(e => events.push(e))
+    feed('data: a\r')
+    feed('\ndata: b\r\n\r\n')
+    expect(events).toEqual([{ event: 'message', data: 'a\nb' }])
+  })
 })

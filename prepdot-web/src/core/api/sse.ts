@@ -3,7 +3,8 @@ export interface SseEvent { event: string; data: string }
 export function createSseParser(onEvent: (event: SseEvent) => void): (chunk: string) => void {
   let buffer = ''
   return (chunk: string) => {
-    buffer += chunk.replace(/\r\n/g, '\n')
+    // 先拼接再归一化：`\r` 与 `\n` 可能被 chunk 边界拆开。
+    buffer = (buffer + chunk).replace(/\r\n/g, '\n')
     let index = buffer.indexOf('\n\n')
     while (index >= 0) {
       const raw = buffer.slice(0, index)

@@ -27,4 +27,10 @@ describe('formatRelativeDay', () => {
   it('labels past days', () => {
     expect(formatRelativeDay('2026-10-28T08:00:00', now)).toBe('3 天前')
   })
+
+  it('treats date-only values as Shanghai midnight', () => {
+    expect(formatServerDate('2026-10-31')).toBe('10月31日 00:00')
+    expect(formatRelativeDay('2026-10-31', now)).toBe('今天')
+    expect(formatRelativeDay('2026-11-01', now)).toBe('明天')
+  })
 })

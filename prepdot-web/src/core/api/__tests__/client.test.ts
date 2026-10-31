@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ApiRequest, HttpTransport, RawResponse } from '@/adapters/types'
+import type { ApiRequest, HttpTransport, MultipartRequest, RawResponse } from '@/adapters/types'
+import { StreamRequestError } from '@/adapters/errors'
 import { ApiError } from '@/core/errors'
 import { ApiClient, type TokenProvider } from '../client'
 
@@ -75,5 +76,69 @@ describe('ApiClient.request', () => {
     expect(error).toMatchObject({ code: 401 })
     expect(calls.unauthorized).toBe(1)
     expect(calls.refresh).toBe(0)
+  })
+})
+
+describe('ApiClient.upload', () => {
+  it('unwraps a successful upload and triggers refresh', async () => {
+    const sent: MultipartRequest[] = []
+    const { provider, calls } = tokenProvider('abc')
+    const client = new ApiClient({
+      json: async <T,>() => ok(null as T),
+      multipart: async <T,>(req: MultipartRequest) => {
+        sent.push(req)
+        return ok('deck-json') as RawResponse<T>
+      },
+      streamText: async function* () {
+        yield* [] as string[]
+      }
+    }, provider)
+
+    await expect(client.upload<string>({
+      path: '/ai/generate',
+      fields: [{ name: 'deckTitle', value: 't' }],
+      file: { field: 'file', name: 'a.txt', mime: 'text/plain', bytes: new ArrayBuffer(0) }
+    })).resolves.toBe('deck-json')
+    expect(sent[0].headers).toEqual({ Authorization: 'Bearer abc' })
+    expect(calls.refresh).toBe(1)
+  })
+})
+
+describe('ApiClient.stream', () => {
+  function streamTransport(failure: Error): HttpTransport {
+    return {
+      json: async <T,>() => ok(null as T),
+      multipart: async <T,>() => ok(null as T),
+      streamText: async function* () {
+        yield* [] as string[]
+        throw failure
+      }
+    }
+  }
+
+  async function consume(iterable: AsyncIterable<string>): Promise<void> {
+    for await (const chunk of iterable) void chunk
+  }
+
+  it('logs out and throws a readable error on a 401 stream', async () => {
+    const { provider, calls } = tokenProvider('expired')
+    const client = new ApiClient(streamTransport(new StreamRequestError(401, '流式请求失败（401）')), provider)
+
+    const error = await consume(client.stream({ method: 'POST', path: '/agent/coach/stream' }))
+      .catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error).toMatchObject({ code: 401, message: '登录已失效，请重新登录' })
+    expect(calls.unauthorized).toBe(1)
+  })
+
+  it('passes non-401 stream failures through unchanged', async () => {
+    const { provider, calls } = tokenProvider('abc')
+    const failure = new StreamRequestError(500, '流式请求失败（500）')
+    const client = new ApiClient(streamTransport(failure), provider)
+
+    const error = await consume(client.stream({ method: 'POST', path: '/agent/coach/stream' }))
+      .catch((e: unknown) => e)
+    expect(error).toBe(failure)
+    expect(calls.unauthorized).toBe(0)
   })
 })

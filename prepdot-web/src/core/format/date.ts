@@ -1,11 +1,12 @@
 const SERVER_TIME_ZONE = 'Asia/Shanghai'
 
 function partsOf(value: string): { y: number; mo: number; d: number; h: number; mi: number; s: number } | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(value)
+  // 时间部分可选：纯日期（如 `2026-10-31`）按上海时区当天 00:00 处理。
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(value)
   if (!match) return null
   return {
     y: Number(match[1]), mo: Number(match[2]), d: Number(match[3]),
-    h: Number(match[4]), mi: Number(match[5]), s: Number(match[6] ?? 0)
+    h: Number(match[4] ?? 0), mi: Number(match[5] ?? 0), s: Number(match[6] ?? 0)
   }
 }
 
