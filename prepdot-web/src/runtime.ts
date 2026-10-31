@@ -1,11 +1,13 @@
 import type { AppAdapters } from '@/adapters/types'
 import { AuthSession } from '@/core/session/session'
 import { ApiClient } from '@/core/api/client'
+import { createApi } from '@/core/api/endpoints'
 
 export interface Runtime {
   adapters: AppAdapters
   session: AuthSession
   api: ApiClient
+  endpoints: ReturnType<typeof createApi>
 }
 
 let runtime: Runtime | null = null
@@ -21,5 +23,6 @@ export function getRuntime(): Runtime {
 
 export function createRuntime(adapters: AppAdapters): Runtime {
   const session = new AuthSession(adapters.storage, adapters.http, adapters.clock)
-  return { adapters, session, api: new ApiClient(adapters.http, session) }
+  const api = new ApiClient(adapters.http, session)
+  return { adapters, session, api, endpoints: createApi(api) }
 }
