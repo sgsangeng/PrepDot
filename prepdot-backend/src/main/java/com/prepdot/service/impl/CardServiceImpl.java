@@ -8,6 +8,7 @@ import com.prepdot.entity.Flashcard;
 import com.prepdot.mapper.DeckMapper;
 import com.prepdot.mapper.FlashcardMapper;
 import com.prepdot.service.CardService;
+import com.prepdot.service.FsrsMemoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ public class CardServiceImpl implements CardService {
 
     private final FlashcardMapper flashcardMapper;
     private final DeckMapper      deckMapper;
+    private final FsrsMemoryService fsrsMemoryService;
 
     @Override
     public Flashcard create(CardRequest request, Long userId) {
@@ -34,10 +36,10 @@ public class CardServiceImpl implements CardService {
         card.setCategory(request.getCategory() != null ? request.getCategory() : "综合");
         card.setCardType(request.getCardType() != null ? request.getCardType() : "qa");
         card.setOptions(request.getOptions());
-        card.setMemoryScore(35);
         card.setReviewCount(0);
         card.setNextReviewAt(LocalDateTime.now());
         flashcardMapper.insert(card);
+        card.setMemoryScore(fsrsMemoryService.currentScore(card, LocalDateTime.now()));
         return card;
     }
 
@@ -54,6 +56,7 @@ public class CardServiceImpl implements CardService {
         card.setOptions(request.getOptions());
 
         flashcardMapper.updateById(card);
+        card.setMemoryScore(fsrsMemoryService.currentScore(card, LocalDateTime.now()));
         return card;
     }
 
@@ -78,6 +81,7 @@ public class CardServiceImpl implements CardService {
         flashcardMapper.updateById(patch);
 
         card.setNote(note);
+        card.setMemoryScore(fsrsMemoryService.currentScore(card, LocalDateTime.now()));
         return card;
     }
 
@@ -92,9 +96,9 @@ public class CardServiceImpl implements CardService {
         List<Long> deckIds = cards.stream().map(Flashcard::getDeckId).distinct().toList();
         List<Deck> decks = deckMapper.selectBatchIds(deckIds);
 
-        // 只保留“确实属于 userId”的卡组 id 集合
+        // 只保留确实属于当前用户的卡组（公共卡组只读，不在可删范围内）
         var ownedDeckIds = decks.stream()
-                .filter(d -> d.getUserId() == null || d.getUserId().equals(userId))
+                .filter(d -> userId.equals(d.getUserId()))
                 .map(Deck::getId)
                 .collect(java.util.stream.Collectors.toSet());
 
@@ -113,12 +117,12 @@ public class CardServiceImpl implements CardService {
         }
     }
 
-    /** 校验卡组归属：userId==null 的卡组视为公共/历史数据，不做拦截 */
+    /** 校验卡组归属：公共卡组（user_id NULL）为只读目录，写操作一律拒绝 */
     private void checkDeckOwner(Long deckId, Long userId) {
         Deck deck = deckMapper.selectById(deckId);
         if (deck == null) throw BusinessException.notFound("卡组不存在: " + deckId);
-        if (deck.getUserId() != null && !deck.getUserId().equals(userId)) {
-            throw BusinessException.forbidden("无权操作该卡组下的卡片");
+        if (deck.getUserId() == null || !deck.getUserId().equals(userId)) {
+            throw BusinessException.forbidden("公共卡组只读，请先导入到自己的卡组再操作");
         }
     }
 }

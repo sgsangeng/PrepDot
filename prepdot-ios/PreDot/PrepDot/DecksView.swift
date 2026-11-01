@@ -70,6 +70,7 @@ struct DecksView: View {
     @State private var searchText = ""
     @State private var showGraph = false
     @State private var loadError = ""
+    @State private var actionError = ""
 
     private var selectedDeck: Deck? {
         decks.first { $0.id == selectedDeckID }
@@ -193,6 +194,14 @@ struct DecksView: View {
                 }
             }
         }
+        .alert("操作失败", isPresented: Binding(
+            get: { !actionError.isEmpty },
+            set: { if !$0 { actionError = "" } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(actionError)
+        }
     }
 
     private func loadDecks() {
@@ -229,9 +238,13 @@ struct DecksView: View {
         Task {
             do {
                 try await APIService.shared.deleteDeck(id: deck.id)
-                if selectedDeckID == deck.id { selectedDeckID = nil }
+                await MainActor.run {
+                    if selectedDeckID == deck.id { selectedDeckID = nil }
+                }
                 loadDecks()
-            } catch {}
+            } catch {
+                await MainActor.run { actionError = error.localizedDescription }
+            }
         }
     }
 }
@@ -466,6 +479,7 @@ struct DeckDetailView: View {
     @State private var isManaging = false
     @State private var selectedIds: Set<Int> = []
     @State private var showQuiz = false
+    @State private var actionError = ""
     var body: some View {
         ZStack(alignment: .bottom) {
             Group {
@@ -580,6 +594,14 @@ struct DeckDetailView: View {
             CardFormSheet(deckId: deck.id, editing: card)
         }
         .task(id: deck.id) { loadCards() }
+        .alert("操作失败", isPresented: Binding(
+            get: { !actionError.isEmpty },
+            set: { if !$0 { actionError = "" } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(actionError)
+        }
     }
 
     private func loadCards() {
@@ -587,9 +609,22 @@ struct DeckDetailView: View {
         Task {
             async let fetchedCards = APIService.shared.fetchCards(deckId: deck.id)
             async let fetchedChildren = APIService.shared.fetchChildDecks(parentId: deck.id)
-            cards = (try? await fetchedCards) ?? []
-            childDecks = (try? await fetchedChildren) ?? []
-            loading = false
+            do {
+                let c = try await fetchedCards
+                let d = try await fetchedChildren
+                await MainActor.run {
+                    cards = c
+                    childDecks = d
+                    loading = false
+                }
+            } catch {
+                _ = try? await fetchedCards
+                _ = try? await fetchedChildren
+                await MainActor.run {
+                    loading = false
+                    actionError = error.localizedDescription
+                }
+            }
         }
     }
 
@@ -597,8 +632,10 @@ struct DeckDetailView: View {
         Task {
             do {
                 try await APIService.shared.deleteCard(id: card.id)
-                cards.removeAll { $0.id == card.id }
-            } catch {}
+                await MainActor.run { cards.removeAll { $0.id == card.id } }
+            } catch {
+                await MainActor.run { actionError = error.localizedDescription }
+            }
         }
     }
 
@@ -607,10 +644,14 @@ struct DeckDetailView: View {
         Task {
             do {
                 try await APIService.shared.deleteCards(ids: ids)
-                cards.removeAll { selectedIds.contains($0.id) }
-                selectedIds.removeAll()
-                isManaging = false
-            } catch {}
+                await MainActor.run {
+                    cards.removeAll { selectedIds.contains($0.id) }
+                    selectedIds.removeAll()
+                    isManaging = false
+                }
+            } catch {
+                await MainActor.run { actionError = error.localizedDescription }
+            }
         }
     }
 }

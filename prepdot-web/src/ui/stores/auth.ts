@@ -1,0 +1,83 @@
+import { defineStore } from 'pinia'
+import { computed, ref } from 'vue'
+import type { AuthUser } from '@/core/api/types'
+import { getRuntime } from '@/runtime'
+import type { Runtime } from '@/runtime'
+import { useCoachStore } from './coach'
+
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<AuthUser | null>(null)
+  const ready = ref(false)
+  const isAuthenticated = computed(() => user.value !== null)
+  let restored = false
+  let restoring: Promise<void> | null = null
+  let listeningRuntime: Runtime | null = null
+  let unsubscribeUnauthorized: (() => void) | null = null
+
+  /** 用户变化时同步重置教练会话，避免 B 看到 A 的历史或进行中的回复。 */
+  function applyUser(next: AuthUser | null): void {
+    user.value = next
+    useCoachStore().setActiveUser(next?.userId ?? null)
+  }
+
+  /** 401 被动登出后同步 Pinia 状态，App.vue 才能切回登录页。 */
+  function listenForUnauthorized(): void {
+    const runtime = getRuntime()
+    if (unsubscribeUnauthorized && listeningRuntime === runtime) return
+    // runtime 被替换时（测试/热重载）先退订旧会话，避免重复回调。
+    unsubscribeUnauthorized?.()
+    listeningRuntime = runtime
+    unsubscribeUnauthorized = runtime.session.onUnauthorizedChange(() => {
+      applyUser(null)
+      restored = true
+      ready.value = true
+    })
+  }
+
+  async function restore(): Promise<void> {
+    listenForUnauthorized()
+    if (restored) {
+      // ApiClient 遇到 401 会让 AuthSession 自行登出；下次导航时同步清掉 store 中的旧用户，
+      // 避免界面停留在「已登录」状态而守卫又不再读取存储。
+      if (user.value && !getRuntime().session.isAuthenticated) applyUser(null)
+      ready.value = true
+      return
+    }
+    if (!restoring) {
+      // 恢复涉及存储读取和（可能较慢的）token 续期；并发导航共用同一个 Promise，
+      // 避免后来的守卫在恢复完成前误判为未登录。
+      restoring = (async () => {
+        try {
+          const restoredUser = await getRuntime().session.restore()
+          // 恢复期间若发生 401 被动登出，不要把旧用户写回 store。
+          applyUser(getRuntime().session.isAuthenticated ? restoredUser : null)
+        } catch {
+          applyUser(null)
+        } finally {
+          ready.value = true
+          restored = true
+          restoring = null
+        }
+      })()
+    }
+    await restoring
+  }
+
+  async function login(username: string, password: string): Promise<void> {
+    listenForUnauthorized()
+    applyUser(await getRuntime().session.login(username, password))
+  }
+
+  async function register(username: string, password: string, nickname: string): Promise<void> {
+    listenForUnauthorized()
+    applyUser(await getRuntime().session.register(username, password, nickname))
+  }
+
+  async function logout(): Promise<void> {
+    await getRuntime().session.logout()
+    applyUser(null)
+    restored = true
+  }
+
+  return { user, ready, isAuthenticated, restore, login, register, logout }
+})

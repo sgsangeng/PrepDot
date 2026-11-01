@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.prepdot.common.Result;
 import com.prepdot.common.UserContext;
 import com.prepdot.dto.response.DeckVO;
-import com.prepdot.dto.response.KnowledgeGraphVO;
 import com.prepdot.service.AIService;
 import com.prepdot.service.DeckService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -64,21 +63,6 @@ public class AIController {
         } catch (Exception e) {
             log.error("AI 生成失败", e);
             return Result.error("AI 生成失败：" + e.getMessage());
-        }
-    }
-
-    /**
-     * 将层级卡组 JSON 入库（AI 生成或手动编写的 JSON 均可）
-     */
-    @Operation(summary = "生成知识图谱")
-    @GetMapping("/knowledge-graph")
-    public Result<KnowledgeGraphVO> knowledgeGraph(
-            @RequestParam(required = false, defaultValue = "") String customKey) {
-        try {
-            return Result.success(aiService.generateKnowledgeGraph(customKey));
-        } catch (Exception e) {
-            log.error("知识图谱生成失败", e);
-            return Result.error("知识图谱生成失败：" + e.getMessage());
         }
     }
 

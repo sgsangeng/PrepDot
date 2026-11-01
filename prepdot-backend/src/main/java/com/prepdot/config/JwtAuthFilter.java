@@ -21,6 +21,7 @@ public class JwtAuthFilter extends HttpFilter {
 
     //领取工具
     private final JwtUtil jwtUtil;
+    private final com.prepdot.mapper.UserMapper userMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();   // 新加的字段
 
 
@@ -49,6 +50,12 @@ public class JwtAuthFilter extends HttpFilter {
 
         String uri = req.getRequestURI();
 
+        // 浏览器 CORS 预检不携带 Authorization；预检只做跨域协商，不执行业务。
+        if ("OPTIONS".equalsIgnoreCase(req.getMethod())) {
+            chain.doFilter(req, resp);
+            return;
+        }
+
         if (isWhitelisted(uri)) {
             chain.doFilter(req, resp);
             return;
@@ -69,6 +76,11 @@ public class JwtAuthFilter extends HttpFilter {
         if (userId == null) {
             // 证件是假的/过期
             writeUnauthorized(resp, "登录凭证无效或已过期");
+            return;
+        }
+        // 4. 账号注销后旧 token 签名仍有效，必须确认用户仍然存在，否则会产生幽灵数据
+        if (userMapper.selectById(userId) == null) {
+            writeUnauthorized(resp, "账号已注销或不存在");
             return;
         }
 

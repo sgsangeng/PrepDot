@@ -1,0 +1,104 @@
+:root {
+  --color-indigo: #4f46e5;
+  --color-indigo-strong: #4338ca;
+  --color-purple: #7c3aed;
+  --color-pink: #d946ef;
+  --color-green: #10b981;
+  --color-orange: #f59e0b;
+  --color-red: #ef4444;
+  --color-teal: #14b8a6;
+  --color-blue: #3b82f6;
+  /*
+   * 强调色的文字版本：品牌色直接作小字号文字时对白底/浅色底不足 4.5:1，
+   * 因此单独提供更深的前景色。填充、描边、图标、图表仍使用上面的品牌色。
+   */
+  --color-indigo-text: #4338ca;
+  --color-purple-text: #6d28d9;
+  --color-pink-text: #be185d;
+  --color-red-text: #b91c1c;
+  --color-orange-text: #92400e;
+  --color-green-text: #065f46;
+  --color-teal-text: #115e59;
+  --color-blue-text: #1d4ed8;
+  /*
+   * 饱和填充色：白字按钮/圆形字母的底色。相对品牌色略深，
+   * 保证白字 ≥4.5:1，同时与浅色/暗色背景仍保持 ≥3:1 的控件边界。
+   * 同一取值在两种主题下均满足要求。
+   */
+  --color-red-fill: #dc2626;
+  --color-green-fill: #047857;
+  /* 中性实心填充：白字字母/圆形标记的底色，白字 ≥5.5:1 且与两种背景 ≥3:1。 */
+  --color-neutral-fill: #70608f;
+  /* 暗色模式下图表/散点的深色端需要更亮的色值，避免与深色背景融在一起。 */
+  --color-chart-start: var(--color-indigo);
+  --color-mastery-end: var(--color-indigo);
+
+  --bg: #f7f6fc;
+  --surface: #ffffff;
+  --surface-soft: rgba(255, 255, 255, 0.58);
+  --surface-muted: #f1eff8;
+  --text: #260d59;
+  --text-secondary: #6b5a8e;
+  --text-tertiary: #70608f;
+  --border: rgba(38, 13, 89, 0.1);
+  --border-strong: rgba(38, 13, 89, 0.18);
+
+  --on-primary: #ffffff;
+  --on-danger: #ffffff;
+  --focus-ring: rgba(79, 70, 229, 0.16);
+  --overlay: rgba(10, 10, 36, 0.45);
+  --toast-bg: rgba(20, 20, 51, 0.92);
+  --toast-text: #ffffff;
+  --shadow-primary: 0 8px 20px rgba(79, 70, 229, 0.35);
+  --glass-border: rgba(255, 255, 255, 0.7);
+
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --shadow-sm: 0 2px 8px rgba(38, 13, 89, 0.06);
+  --shadow-md: 0 4px 16px rgba(38, 13, 89, 0.08);
+  --shadow-lg: 0 12px 32px rgba(38, 13, 89, 0.14);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+  --font-rounded: ui-rounded, "SF Pro Rounded", var(--font-sans);
+
+  --tab-height: 49px;
+  --sidebar-width: 240px;
+  --content-max: 1100px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a0a24;
+    --surface: #141433;
+    --surface-soft: rgba(255, 255, 255, 0.08);
+    --surface-muted: rgba(255, 255, 255, 0.06);
+    --text: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.66);
+    --text-tertiary: rgba(255, 255, 255, 0.52);
+    --color-indigo-text: #a5b4fc;
+    --color-purple-text: #c4b5fd;
+    --color-pink-text: #f9a8d4;
+    --color-red-text: #fca5a5;
+    --color-orange-text: #fcd34d;
+    --color-green-text: #6ee7b7;
+    --color-teal-text: #5eead4;
+    --color-blue-text: #93c5fd;
+    --color-chart-start: #818cf8;
+    --color-mastery-end: #818cf8;
+    --border: rgba(255, 255, 255, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.2);
+    --on-primary: #ffffff;
+    --on-danger: #ffffff;
+    --focus-ring: rgba(129, 140, 248, 0.35);
+    --overlay: rgba(0, 0, 0, 0.6);
+    --toast-bg: rgba(56, 56, 96, 0.95);
+    --toast-text: #ffffff;
+    --shadow-primary: 0 8px 20px rgba(0, 0, 0, 0.45);
+    --glass-border: rgba(255, 255, 255, 0.14);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.36);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+}

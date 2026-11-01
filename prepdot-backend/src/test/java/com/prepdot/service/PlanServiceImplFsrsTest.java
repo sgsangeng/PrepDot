@@ -29,6 +29,7 @@ class PlanServiceImplFsrsTest {
     private final FlashcardMapper cardMapper = mock(FlashcardMapper.class);
     private final ReviewRecordMapper recordMapper = mock(ReviewRecordMapper.class);
     private final DeckMapper deckMapper = mock(DeckMapper.class);
+    private final UserMapper userMapper = mock(UserMapper.class);
     private final FsrsScheduler scheduler = new FsrsScheduler();
     private final FsrsMemoryService memoryService = new FsrsMemoryService(scheduler);
     private PlanServiceImpl service;
@@ -36,7 +37,7 @@ class PlanServiceImplFsrsTest {
     @BeforeEach
     void setUp() {
         service = new PlanServiceImpl(planMapper, itemMapper, cardMapper, recordMapper,
-                deckMapper, scheduler, memoryService);
+                deckMapper, userMapper, scheduler, memoryService);
     }
 
     @Test
@@ -86,7 +87,7 @@ class PlanServiceImplFsrsTest {
         FsrsMemoryService mockedMemoryService = mock(FsrsMemoryService.class);
         PlanServiceImpl planService = new PlanServiceImpl(
                 planMapper, itemMapper, cardMapper, recordMapper,
-                deckMapper, scheduler, mockedMemoryService);
+                deckMapper, userMapper, scheduler, mockedMemoryService);
 
         DailyPlan plan = new DailyPlan();
         plan.setId(100L);

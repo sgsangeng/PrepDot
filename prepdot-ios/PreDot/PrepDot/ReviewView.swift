@@ -335,6 +335,7 @@ struct CardSessionView: View {
     @State private var showChat = false
     @State private var showEdit = false
     @State private var showNote = false
+    @State private var submitError = ""
 
     var current: Flashcard { cards[currentIndex] }
 
@@ -393,6 +394,14 @@ struct CardSessionView: View {
                 onCardChanged(updated)
             }
         }
+        .alert("提交失败", isPresented: Binding(
+            get: { !submitError.isEmpty },
+            set: { if !$0 { submitError = "" } }
+        )) {
+            Button("重试", role: .cancel) {}
+        } message: {
+            Text(submitError + "\n本次评分未记录，请重试。")
+        }
     }
 
     // 翻面后的操作工具条：问AI / 编辑 / 笔记
@@ -422,9 +431,18 @@ struct CardSessionView: View {
     private func submitRating(_ rating: String) {
         submitting = true
         Task {
-            do { _ = try await APIService.shared.submitReview(ReviewRequest(cardId: current.id, rating: rating)) } catch {}
-            submitting = false
-            if currentIndex + 1 < cards.count { currentIndex += 1 } else { onFinish() }
+            do {
+                _ = try await APIService.shared.submitReview(ReviewRequest(cardId: current.id, rating: rating))
+                await MainActor.run {
+                    submitting = false
+                    if currentIndex + 1 < cards.count { currentIndex += 1 } else { onFinish() }
+                }
+            } catch {
+                await MainActor.run {
+                    submitting = false
+                    submitError = error.localizedDescription
+                }
+            }
         }
     }
 }
@@ -962,6 +980,7 @@ struct CardNoteSheet: View {
 
     @State private var text = ""
     @State private var saving = false
+    @State private var saveError = ""
 
     var body: some View {
         NavigationStack {
@@ -1000,6 +1019,14 @@ struct CardNoteSheet: View {
                 }
             }
             .onAppear { text = card.note ?? "" }
+            .alert("保存失败", isPresented: Binding(
+                get: { !saveError.isEmpty },
+                set: { if !$0 { saveError = "" } }
+            )) {
+                Button("好", role: .cancel) {}
+            } message: {
+                Text(saveError)
+            }
         }
     }
 
@@ -1008,10 +1035,17 @@ struct CardNoteSheet: View {
         Task {
             do {
                 let updated = try await APIService.shared.updateCardNote(id: card.id, note: text)
-                onSaved(updated)
-                dismiss()
-            } catch {}
-            saving = false
+                await MainActor.run {
+                    saving = false
+                    onSaved(updated)
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    saving = false
+                    saveError = error.localizedDescription
+                }
+            }
         }
     }
 }

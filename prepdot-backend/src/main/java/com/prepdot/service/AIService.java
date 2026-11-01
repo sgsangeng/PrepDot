@@ -2,22 +2,15 @@ package com.prepdot.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.prepdot.dto.response.KnowledgeGraphVO;
-import com.prepdot.entity.Deck;
-import com.prepdot.entity.Flashcard;
-import com.prepdot.mapper.DeckMapper;
-import com.prepdot.mapper.FlashcardMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xslf.usermodel.*;
 import org.apache.poi.xwpf.usermodel.*;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import com.prepdot.service.FsrsMemoryService;
 
 import java.io.*;
 import java.net.URI;
@@ -25,7 +18,6 @@ import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * AI 服务：文件解析 + DeepSeek API 调用
@@ -42,10 +34,6 @@ public class AIService {
 
     @Value("${ai.deepseek.model:deepseek-chat}")
     private String defaultModel;
-
-    @Autowired private FlashcardMapper flashcardMapper;
-    @Autowired private DeckMapper      deckMapper;
-    @Autowired private FsrsMemoryService fsrsMemoryService;
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -203,115 +191,5 @@ public class AIService {
         body.put("temperature", 0.3);
         body.put("max_tokens", 8192);
         return mapper.writeValueAsString(body);
-    }
-
-    /** 通用 AI 调用，返回 content 字符串（已去 markdown 代码块） */
-    private String callAI(String prompt, String key) throws Exception {
-        String requestBody = buildRequestBody(prompt);
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(apiUrl))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + key)
-                .timeout(Duration.ofSeconds(120))
-                .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
-                .build();
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() != 200) throw new RuntimeException("AI 调用失败: " + response.statusCode());
-        String content = mapper.readTree(response.body())
-                .path("choices").get(0).path("message").path("content").asText();
-        content = content.trim();
-        if (content.startsWith("```")) {
-            content = content.replaceFirst("```[a-z]*\\n?", "").replaceAll("```\\s*$", "").trim();
-        }
-        return content;
-    }
-
-    // ─────────────────────────────────────────────
-    //  知识图谱生成
-    // ─────────────────────────────────────────────
-
-    public KnowledgeGraphVO generateKnowledgeGraph(String customKey) throws Exception {
-        String key = (customKey != null && !customKey.isBlank()) ? customKey : systemKey;
-        if (key == null || key.isBlank()) throw new IllegalStateException("未配置 AI API Key");
-
-        List<Flashcard> all = flashcardMapper.selectList(null);
-        KnowledgeGraphVO empty = new KnowledgeGraphVO();
-        empty.setNodes(List.of()); empty.setEdges(List.of());
-        if (all.isEmpty()) return empty;
-
-        // 最多取 50 张，避免 token 爆炸
-        List<Flashcard> sample = all.size() > 50 ? all.subList(0, 50) : all;
-
-        // 构建 deckId → deck 映射 & cardId → card 映射
-        Map<Long, Deck> deckMap = deckMapper.selectList(null).stream()
-                .collect(Collectors.toMap(Deck::getId, d -> d));
-        Map<Long, Flashcard> cardMap = sample.stream()
-                .collect(Collectors.toMap(Flashcard::getId, c -> c));
-
-        // 拼卡片列表给 AI
-        StringBuilder sb = new StringBuilder();
-        for (Flashcard c : sample) {
-            Deck d = deckMap.get(c.getDeckId());
-            String dTitle = d != null ? d.getTitle() : "未知卡组";
-            long   dId    = d != null ? d.getId()    : 0;
-            sb.append(String.format("%d|%d|%s|%s\n", c.getId(), dId, dTitle, c.getQuestion()));
-        }
-
-        String content = callAI(buildGraphPrompt(sb.toString()), key);
-
-        // 解析
-        JsonNode root = mapper.readTree(content);
-        List<KnowledgeGraphVO.NodeVO> nodes = new ArrayList<>();
-        for (JsonNode n : root.path("nodes")) {
-            KnowledgeGraphVO.NodeVO node = new KnowledgeGraphVO.NodeVO();
-            node.setId(n.path("id").asText());
-            node.setLabel(n.path("label").asText());
-            node.setDeckId(n.path("deckId").asInt());
-            node.setDeckTitle(n.path("deckTitle").asText());
-            node.setCore(n.path("isCore").asBoolean(false));
-            // 填入真实复习数据
-            try {
-                long cardId = Long.parseLong(n.path("id").asText());
-                Flashcard card = cardMap.get(cardId);
-                if (card != null) {
-                    node.setMemoryScore(fsrsMemoryService.currentScore(card, java.time.LocalDateTime.now()));
-                    node.setReviewCount(card.getReviewCount() != null ? card.getReviewCount() : 0);
-                }
-            } catch (NumberFormatException ignored) {}
-            nodes.add(node);
-        }
-        List<KnowledgeGraphVO.EdgeVO> edges = new ArrayList<>();
-        for (JsonNode e : root.path("edges")) {
-            KnowledgeGraphVO.EdgeVO edge = new KnowledgeGraphVO.EdgeVO();
-            edge.setSource(e.path("source").asText());
-            edge.setTarget(e.path("target").asText());
-            edge.setLabel(e.path("label").asText(""));
-            edges.add(edge);
-        }
-        KnowledgeGraphVO vo = new KnowledgeGraphVO();
-        vo.setNodes(nodes); vo.setEdges(edges);
-        return vo;
-    }
-
-    private String buildGraphPrompt(String cardList) {
-        return """
-                你是知识图谱分析专家。请分析以下学习卡片，找出知识关联，构建图谱。
-
-                卡片列表（格式：卡片ID|卡组ID|卡组名|问题）：
-                %s
-
-                要求：
-                1. 找出有实质关联的卡片对（前置知识、同族概念、对比关系、因果关系等）
-                2. 宁缺毋滥，不要强行关联无关内容
-                3. 被三张以上卡片关联的核心节点 isCore 设为 true
-                4. 关系描述不超过 8 个字
-                5. nodes 只包含参与了关联的卡片（没有边的孤立节点不用列出）
-                6. 严格返回 JSON，不加代码块或任何解释：
-
-                {
-                  "nodes": [{"id":"1","label":"问题摘要≤12字","deckId":1,"deckTitle":"卡组名","isCore":false}],
-                  "edges": [{"source":"1","target":"2","label":"关系描述"}]
-                }
-                """.formatted(cardList);
     }
 }

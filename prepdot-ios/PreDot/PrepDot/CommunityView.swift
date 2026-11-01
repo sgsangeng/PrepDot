@@ -31,6 +31,7 @@ struct CommunityView: View {
 
     @State private var packs: [CommunityPack] = []
     @State private var loading = true
+    @State private var loadError = ""
     @State private var selectedPack: CommunityPack?
     @State private var toastMsg: String?
     @State private var showToast = false
@@ -46,6 +47,15 @@ struct CommunityView: View {
                 if loading {
                     ProgressView("加载卡包库…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if !loadError.isEmpty {
+                    ContentUnavailableView {
+                        Label("卡包加载失败", systemImage: "wifi.exclamationmark")
+                    } description: {
+                        Text(loadError)
+                    } actions: {
+                        Button("重新加载") { Task { await loadPacks() } }
+                            .buttonStyle(.borderedProminent)
+                    }
                 } else if packs.isEmpty {
                     ContentUnavailableView("暂无卡包", systemImage: "tray")
                 } else {
@@ -129,9 +139,12 @@ struct CommunityView: View {
 
     private func loadPacks() async {
         loading = true
+        loadError = ""
         do {
             packs = try await APIService.shared.getCommunityPacks()
-        } catch {}
+        } catch {
+            loadError = error.localizedDescription
+        }
         loading = false
     }
 }
@@ -219,6 +232,7 @@ struct PackDetailSheet: View {
 
     @State private var detail: CommunityPackDetail?
     @State private var loading = true
+    @State private var loadError = ""
     @State private var importing = false
     @State private var imported = false
     @Environment(\.dismiss) var dismiss
@@ -269,6 +283,15 @@ struct PackDetailSheet: View {
                         }
                     }
                     .listStyle(.insetGrouped)
+                } else {
+                    ContentUnavailableView {
+                        Label("加载失败", systemImage: "wifi.exclamationmark")
+                    } description: {
+                        Text(loadError)
+                    } actions: {
+                        Button("重新加载") { Task { await loadDetail() } }
+                            .buttonStyle(.borderedProminent)
+                    }
                 }
             }
             .navigationTitle(pack.title)
@@ -296,9 +319,13 @@ struct PackDetailSheet: View {
     }
 
     private func loadDetail() async {
+        loading = true
+        loadError = ""
         do {
             detail = try await APIService.shared.getCommunityPackDetail(id: pack.id)
-        } catch {}
+        } catch {
+            loadError = error.localizedDescription
+        }
         loading = false
     }
 

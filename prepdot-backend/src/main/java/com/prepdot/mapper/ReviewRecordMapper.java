@@ -6,11 +6,24 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
 @Mapper
 public interface ReviewRecordMapper extends BaseMapper<ReviewRecord> {
+
+    /**
+     * 用户有过复习记录的去重日期，倒序返回，用于计算连续学习天数。
+     */
+    @Select("""
+        SELECT DISTINCT DATE(reviewed_at)
+        FROM review_record
+        WHERE user_id = #{userId}
+        ORDER BY 1 DESC
+        LIMIT 400
+        """)
+    List<LocalDate> selectReviewDates(@Param("userId") Long userId);
 
     /**
      * 统计当前用户今天复习过的卡片（按去重后的卡片），按卡组分组。
