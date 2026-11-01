@@ -20,7 +20,7 @@
 |---|---|
 | 后端 | Java 17、Spring Boot 3.3.4、MyBatis-Plus、MySQL 8、Flyway、JWT（滑动续期）、SSE |
 | 客户端 | iOS：SwiftUI（iPhone / iPad）、Charts、NavigationSplitView + OutlineGroup；Web：Vue 3、Vite、TypeScript |
-| 部署 | GitHub Actions → Docker Compose（服务器本机构建）→ Caddy 反代 HTTPS；Web 静态站点由 Caddy 直接提供 |
+| 部署 | GitHub Actions（需配置仓库 Secrets）→ Docker Compose（服务器本机构建）→ Caddy 反代 HTTPS；Web 静态站点由 Caddy 直接提供 |
 
 ## 项目结构
 
@@ -62,7 +62,8 @@ prepdot-web/scripts/deploy-web.sh
 
 开发模式下 `/api` 会被代理到 `http://127.0.0.1:8080`（可用 `VITE_DEV_API_TARGET` 覆盖）；
 生产环境 Web 与 API 同源，均由 Caddy 反代。Web 端的首次部署、日常发布、回滚与常见问题见
-[DEPLOY-WEB.md](DEPLOY-WEB.md)。
+[DEPLOY-WEB.md](DEPLOY-WEB.md)；2026-11-01 的正式发布记录、验证结果与回滚命令见
+[DEPLOY-WEB.md 第 10 节](DEPLOY-WEB.md#10-发布记录2026-11-01)。
 
 Web 端复用现有后端接口，不改变 iOS 端行为；桌面端（Phase 2）尚未开始。
 

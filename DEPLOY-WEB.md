@@ -409,18 +409,18 @@ curl -fsSI https://prepdot.site/ | grep -i content-type
 
 ---
 
-## 6. 演示账号与每日重置（脚本已就绪，需安装 cron）
+## 6. 演示账号与每日重置（已启用）
 
 生产环境提供一个公开的演示账号，方便访客直接体验。为了避免访客把演示数据改乱，
 服务器上有一个重置脚本，由 cron 每天凌晨自动恢复初始状态。
 
-> **当前状态**：卡组数据、回填 SQL 与 `reset-demo.sh` 已在仓库 `deploy/demo/` 中，
-> 发布 Web 站点时会自动同步到 `/opt/prepdot/demo/`。按 §6.1 安装 cron 并手动执行一次后，
-> 才会开始每日自动重置。
+> **当前状态（2026-11-01）**：卡组数据、回填 SQL 与 `reset-demo.sh` 已同步到
+> `/opt/prepdot/demo/`；cron 已安装并完成首次重置。发布 Web 站点时会自动同步这些文件，
+> 但会排除 `.reset-demo.lock` 与 `.demo-user-id`。
 
 | 项目 | 值 |
 |---|---|
-| 状态 | 脚本已就绪，需按 §6.1 安装 cron |
+| 状态 | 已安装 cron，已完成首次重置 |
 | 脚本路径 | `/opt/prepdot/demo/reset-demo.sh` |
 | 执行时间 | 每天 04:17（服务器本地时区，Asia/Shanghai） |
 | cron 表达式 | `17 4 * * *` |
@@ -620,7 +620,114 @@ curl -fsSI https://prepdot.site/ | grep -i content-type
 
 ---
 
-## 10. 边界
+## 10. 发布记录（2026-11-01）
+
+| 项目 | 结果 |
+|---|---|
+| 合并提交 | `12a9b94`（`feat/web-multiplatform` → `main`，`--no-ff`） |
+| 后端 | `JwtAuthFilter` 放行 `OPTIONS`；生产容器重建后健康检查通过 |
+| 数据库备份 | `/opt/prepdot/backups/prepdot-db-20261101-104043.sql.gz`（`gzip -t` 通过，含 10 张表） |
+| 后端镜像备份 | `prepdot-backend:prev-20261101-104031` |
+| Caddy 配置备份 | `/opt/adeer/Caddyfile.backup-20261101-104349` |
+| Web 静态目录 | `/opt/adeer/legal/prepdot-site/app`（旧版在 `app.prev`） |
+| 落地页 | `/opt/adeer/legal/prepdot-site/welcome/` |
+| demo 首次重置 | 2026-11-01 10:44:46，14 个卡组 / 60 张卡 / 18 张今日到期 / 336 条复习记录 |
+| demo 验收后重置 | 2026-11-01 10:53:17，数据量同上 |
+| cron | `17 4 * * * timeout 900 /opt/prepdot/demo/reset-demo.sh >> /opt/prepdot/demo-reset.log 2>&1` |
+
+### 10.1 后端发布说明（重要）
+
+本次 `git push origin main` 触发的 GitHub Actions 运行
+[`41265974860`](https://github.com/sgsangeng/PrepDot/actions/runs/41265974860)
+在 “Upload source” 步骤失败：仓库尚未配置 `PREPDOT_DEPLOY_HOST`、
+`PREPDOT_DEPLOY_USER`、`PREPDOT_DEPLOY_SSH_KEY`、`PREPDOT_KNOWN_HOSTS` 这四个 Secrets，
+`DEPLOY_HOST`/`DEPLOY_USER` 为空，`rsync` 无法解析主机名。
+
+本次后端改为在本地用与 workflow 相同的步骤手动发布：
+
+```bash
+rsync -az --delete --exclude 'src/main/resources/application.yml' --exclude 'target/' \
+  -e "ssh -i ~/.ssh/id_ed25519" prepdot-backend/ \
+  ubuntu@62.234.146.153:/opt/prepdot/prepdot-backend/
+rsync -az -e "ssh -i ~/.ssh/id_ed25519" docker-compose.production.yml \
+  ubuntu@62.234.146.153:/opt/prepdot/docker-compose.production.yml
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 '
+  cd /opt/prepdot
+  docker compose --project-name prepdot --env-file .env.production \
+    -f docker-compose.production.yml up -d --build --remove-orphans
+'
+```
+
+发布后 `prepdot-backend` 在约 30 秒内变为 `healthy`。**后续若要让 push 自动部署**，
+需要在 GitHub 仓库 `Settings → Secrets and variables → Actions` 中补齐上述四个 Secrets
+（SSH 私钥内容、`known_hosts` 内容、主机 `62.234.146.153`、用户 `ubuntu`），
+然后手动重跑一次 workflow 验证。未配置前，后端改动仍需按上面的命令手动发布。
+
+### 10.2 验证结果
+
+| 检查 | 结果 |
+|---|---|
+| `https://prepdot.site/` | 200 |
+| `https://prepdot.site/welcome/` | 200（`/welcome` 为 301） |
+| `https://prepdot.site/api/health` | 200，`{"code":200,...}` |
+| `https://api.prepdot.site/api/health` | 200 |
+| `https://www.prepdot.site/` | 301 → `https://prepdot.site/` |
+| CORS 预检 `OPTIONS /api/plan/review` | 200，含 `Access-Control-Allow-Origin: https://prepdot.site` |
+| 前端深链 `/review`、`/decks` 刷新 | 200 `text/html`（SPA 兜底） |
+| `pnpm e2e`（本地 dev + 生产环境各 2 例） | 4/4 通过 |
+| AI 生成（上传测试资料） | 200，约 3 秒，生成 5 个子卡组 / 7 张卡，导入后可见，测试卡组已删除 |
+| AI 教练 SSE | 200，收到 `progress` + `result` 事件，约 2.3 秒 |
+| 复习提交 | 200，今日计划 `completedCount` 从 0 变 1，随后重置恢复为 0 |
+| iOS 构建与启动 | `BUILD SUCCEEDED`；模拟器登录 demo 后显示 18 张待复习 |
+
+> 说明：本机 Xcode 安装不带独立 `Simulator.app`，模拟器只能无头运行，
+> 无法用鼠标点击「知识树」标签，因此 **iOS 端点开卡组列表的人工交叉验收未完成**。
+> 已确认 iOS 与 Web 使用同一账号、同一后端，且 iOS 能读取生产 demo 计划（18 张）。
+> 有图形界面的 Xcode/真机环境下，登录 demo 后下拉刷新知识树即可完成这一步。
+
+### 10.3 回滚
+
+```bash
+# Web 前端
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  'cd /opt/adeer/legal/prepdot-site && rm -rf app.failed && mv app app.failed && mv app.prev app'
+
+# Caddy（本次备份文件名）
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 \
+  'cd /opt/adeer && cp Caddyfile.backup-20261101-104349 Caddyfile && \
+   docker exec adeer-caddy-1 caddy validate --config /etc/caddy/Caddyfile && \
+   docker exec adeer-caddy-1 caddy reload --config /etc/caddy/Caddyfile'
+```
+
+若旧 Caddy 配置从站点根目录提供落地页，回滚后还需要把 `welcome/` 里的
+`index.html`、`site.css`、`site.js`、`app-icon.png` 移回根目录，否则 `/` 会 404。
+
+后端回滚：
+
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 '
+  cd /opt/prepdot
+  docker tag prepdot-backend:prev-20261101-104031 prepdot-backend:latest
+  docker compose --project-name prepdot --env-file .env.production \
+    -f docker-compose.production.yml up -d --no-build --force-recreate backend
+'
+```
+
+数据库回滚（仅在确认需要时执行，会覆盖当前数据）：
+
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@62.234.146.153 '
+  cd /opt/prepdot
+  set -a; . ./.env.production; set +a
+  gunzip -c backups/prepdot-db-20261101-104043.sql.gz | \
+    docker exec -i -e MYSQL_PWD="$MYSQL_PASSWORD" prepdot-mysql \
+      mysql -u"$MYSQL_USER" "$MYSQL_DATABASE"
+'
+```
+
+---
+
+## 11. 边界
 
 - **不改 iOS**：`prepdot-ios/` 与 `api.prepdot.site` 的行为保持不变。
 - **不改后端接口契约**：本阶段 Web 端复用现有 `/api`，Caddy 只做路径转发。分支里的后端
